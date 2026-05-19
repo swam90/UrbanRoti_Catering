@@ -297,10 +297,10 @@ const fdl=d=>{if(!d)return'';return new Date(d+'T00:00:00').toLocaleDateString('
 function go(s){document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));document.getElementById('s-'+s).classList.add('active');const n=document.getElementById('n-'+s);if(n)n.classList.add('on');if(s==='home'){dash();renderHome()}if(s==='history')renderHist()}
 
 // ── WIZARD STATE ──
-var step=0,wd={},pis=[],acs=[],eds=[],mf=null,editingId=null;
+var step=0,wd={},pis=[],acs=[],eds=[],mf=null,editingId=null,editingInvId=null;
 const STPS=[['Event Setup','Step 1 of 4'],['Pax & Pricing','Step 2 of 4'],['Extra & Terms','Step 3 of 4'],['Review','Step 4 of 4']];
 
-function newQ(){editingId=null;step=0;wd={};pis=[{n:'Adults Package',p:'',t:'adults',q:0},{n:'Kids Meal',p:'',t:'kids',q:0}];acs=[];eds=[''];mf=null;render();go('wizard')}
+function newQ(){editingId=null;editingInvId=null;step=0;wd={};pis=[{n:'Adults Package',p:'',t:'adults',q:0},{n:'Kids Meal',p:'',t:'kids',q:0}];acs=[];eds=[''];mf=null;render();go('wizard')}
 
 // [FIX 4] Edit quote — pre-fills wizard with existing data
 function editQ(id){
@@ -314,13 +314,25 @@ function editQ(id){
   render();go('wizard');
 }
 
+// ── EDIT INVOICE ──
+function editInv(id){
+  const inv=DB.invs().find(x=>x.id===id);if(!inv)return;
+  editingId=null;editingInvId=id;step=0;
+  wd={fn:inv.fromName||'Urban Roti',fc:inv.fromContact||'+65 6209 5545',cn:inv.customer?.name||'',cc:inv.customer?.contact||'',ve:inv.venue||'',ed:inv.eventDate||'',sl:inv.slot||'',ts:inv.timeStart||'',te:inv.timeEnd||'',pa:inv.pax?.adults||0,pk:inv.pax?.kids||0,wt:inv.terms||TERMS,rm:inv.remarks||'',menuText:inv.menuText||'',discType:inv.discount?.type||'amt',discVal:inv.discount?.value||0};
+  eds=(inv.eventDates&&inv.eventDates.length)?[...inv.eventDates]:[inv.eventDate||''];
+  pis=(inv.pricingItems||[]).map(p=>({n:p.packageName,p:p.unitPrice,t:p.paxType||'adults',q:p.customQty||0}));
+  acs=(inv.additionalCosts||[]).map(c=>({d:c.description||c.d||'',a:c.amount||c.a||0}));
+  mf=inv.menuFile||null;
+  cSheet();render();go('wizard');
+}
+
 function render(){
   document.getElementById('w-lbl').textContent=STPS[step][1];
-  document.getElementById('w-ttl').textContent=editingId?`Edit ${STPS[step][0]}`:STPS[step][0];
+  document.getElementById('w-ttl').textContent=editingInvId?('Edit Invoice: '+editingInvId):editingId?('Edit '+STPS[step][0]):STPS[step][0];
   document.getElementById('w-dots').innerHTML=[0,1,2,3].map(i=>`<div class="dot ${i<step?'dn':i===step?'cu':''}"></div>`).join('');
   document.getElementById('w-prev').style.display=step===0?'none':'flex';
   const nb=document.getElementById('w-next');
-  if(step===3){nb.className='wfb wf-gn';nb.textContent=editingId?'✏️ Update Quotation':'✦ Generate';nb.onclick=generate}
+  if(step===3){nb.className='wfb wf-gn';nb.textContent=editingInvId?'💾 Update Invoice':editingId?'✏️ Update Quotation':'✦ Generate';nb.onclick=generate}
   else{nb.className='wfb wf-nx';nb.textContent='Next →';nb.onclick=wNext}
   document.getElementById('w-body').innerHTML=[s0,s1,s2,s3][step]();
   document.getElementById('s-wizard').scrollTo(0,0);
@@ -514,7 +526,7 @@ function validate(){
   return true;
 }
 function wNext(){saveWD();if(!validate())return;if(step<3){step++;render()}}
-function wBack(){saveWD();if(step>0){step--;render()}else{editingId=null;go('home')}}
+function wBack(){saveWD();if(step>0){step--;render()}else{editingId=null;editingInvId=null;go('home')}}
 function addPI(){pis.push({n:'',p:'',t:'all',q:0});document.getElementById('pi-list').innerHTML=piCards()}
 function rmPI(i){pis.splice(i,1);document.getElementById('pi-list').innerHTML=piCards()}
 function setPT(i,t){pis[i].t=t;document.getElementById('pi-list').innerHTML=piCards()}
@@ -536,6 +548,15 @@ function generate(){
     // [FIX 4] Update existing quote
     const idx=qs.findIndex(x=>x.id===editingId);
     if(idx>=0){qs[idx]={...qs[idx],from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};DB.sq(qs);toast(`${editingId} updated!`,'ok');const id=editingId;editingId=null;oSheet(id,'quote');go('history');}
+  } else if(editingInvId){
+    // Update existing invoice (keeps advancePayment, status, invoiceDate, id)
+    const invs=DB.invs(),invIdx=invs.findIndex(x=>x.id===editingInvId);
+    if(invIdx>=0){
+      const orig=invs[invIdx];
+      invs[invIdx]={...orig,customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt,fromName:wd.fn,fromContact:wd.fc};
+      DB.si(invs);toast(`Invoice ${editingInvId} updated! ✅`,'ok');
+      const invId=editingInvId;editingInvId=null;oSheet(invId,'invoice');go('history');
+    }
   } else {
     const q={id:DB.nq(),createdAt:new Date().toISOString(),status:'draft',from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};
     qs.unshift(q);DB.sq(qs);toast(`${q.id} generated!`,'ok');oSheet(q.id,'quote');go('home');
@@ -576,6 +597,7 @@ function oSheet(id,type){
   let a=`<button class="sb sb-w" onclick="waWithPDF('${type}','${id}')">💬 Share via WhatsApp (PDF)</button>`;
   a+=`<button class="sb sb-e" onclick="mail('${type}','${id}')">✉️ Share via Email</button>`;
   if(type==='quote'&&obj.status!=='invoiced')a+=`<button class="sb sb-g" onclick="promptMkInv('${id}')">✅ Confirm & Generate Invoice</button>`;
+  if(type==='invoice')a+=`<button class="sb sb-o" onclick="editInv('${id}')">✏️ Edit Invoice</button>`;
   if(type==='invoice'&&(obj.status!=='paid'&&(obj.advancePayment||0)<(obj.grandTotal||0)))a+=`<button class="sb sb-g" onclick="mkPaid('${id}');cSheet()">✅ Mark as Fully Paid</button>`;
   a+=`<button class="sb sb-o" onclick="xPDF('${id}','${type}')">📄 Export Full PDF</button>`;
   document.getElementById('sh-foot').innerHTML=a;
@@ -626,7 +648,7 @@ function genA4HTML(obj,type){
   var ml=obj.menuFile?('<div style="margin-top:4px"><a href="'+obj.menuFile.data+'" style="color:#C4552A;font-size:11px">Menu: '+obj.menuFile.name+'</a></div>'):'';
   var docTypeLabel=isQ?'QUOTATION':'INVOICE';
   var docDate=isQ?('Date: '+fdl(obj.createdAt?.split('T')[0])):('Invoice Date: '+fdl(obj.invoiceDate));
-  var quoteRefRow=isQ?'':('<div style="font-size:12px;color:#8A6540">Quote Ref: '+(obj.quotationId||'--')+'</div>');
+  var quoteRefRow=isQ?'':('<div style="font-size:12px;color:#8A6540;font-weight:700">Quote Ref: '+(obj.quotationId||'--')+'</div>');
   var fromLabel=isQ?'From':'Billed By';
   var fromName=isQ?(obj.from?.name||''):'Urban Roti Catering';
   var fromContact=isQ?(obj.from?.contact||''):'+65 6209 5545';
@@ -724,25 +746,28 @@ function genA4HTML(obj,type){
   +'<div>'
   +'<div style="font-size:28px;font-weight:700;color:#1A0C04;font-family:Georgia,serif;letter-spacing:-.5px">Urban Roti</div>'
   +'<div style="font-size:11px;color:#C4552A;font-weight:700;margin-top:2px;letter-spacing:1.5px">CATERING &amp; EVENTS</div>'
-  +'<div style="font-size:12px;color:#8A6540;margin-top:4px">+65 6209 5545 | admin@urbanroti.com.sg</div>'
-  +'<div style="font-size:12px;color:#8A6540">101 Syed Alwi Road, Singapore 207677</div>'
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700;margin-top:4px">+65 6209 5545 | admin@urbanroti.com.sg</div>'
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700">101 Syed Alwi Road, Singapore 207677</div>'
   +'</div></div>'
   +'<div style="text-align:right">'
   +'<div style="font-size:34px;font-weight:700;color:#C4552A;letter-spacing:1px">'+docTypeLabel+'</div>'
   +'<div style="font-size:15px;font-weight:700;margin-top:5px">'+obj.id+'</div>'
-  +'<div style="font-size:12px;color:#8A6540;margin-top:4px">'+docDate+'</div>'+quoteRefRow
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700;margin-top:4px">'+docDate+'</div>'+quoteRefRow
   +'</div></div>'
-  // FROM / TO
+  +'</div>'
+  +'<div id="pdf-body" style="padding:20px 52px 44px;background:#fff">'
+  // FROM / TO (not in repeating header — only shows on page 1)
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'
   +'<div style="background:#FDF6EE;border-left:4px solid #C4552A;padding:13px 16px;border-radius:4px">'
   +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:6px">'+fromLabel+'</div>'
   +'<div style="font-size:17px;font-weight:700">'+fromName+'</div>'
-  +'<div style="font-size:12px;color:#8A6540;margin-top:3px">'+fromContact+'</div>'
-  +'<div style="font-size:12px;color:#8A6540">'+fromExtra+'</div></div>'
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700;margin-top:3px">'+fromContact+'</div>'
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700">'+fromExtra+'</div></div>'
   +'<div style="background:#FDF6EE;border-left:4px solid #D4922A;padding:13px 16px;border-radius:4px">'
   +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#D4922A;margin-bottom:6px">'+toLabel+'</div>'
   +'<div style="font-size:17px;font-weight:700">'+(obj.customer?.name||'')+'</div>'
-  +'<div style="font-size:12px;color:#8A6540;margin-top:3px">'+(obj.customer?.contact||'')+'</div></div></div>'
+  +'<div style="font-size:12px;color:#8A6540;font-weight:700;margin-top:3px">'+(obj.customer?.contact||'')+'</div></div></div>'
+  // Event strip, pax, content — all in pdf-body
   +'<div style="background:#C4552A;border-radius:8px;padding:16px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">'
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Event Date'+(eventDatesArr.filter(Boolean).length>1?'s':'')+'</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;line-height:1.4">'+eventDatesDisplay+'</div></div>'
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Slot</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px">'+(obj.slot||'--')+'</div></div>'
@@ -750,12 +775,10 @@ function genA4HTML(obj,type){
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Venue</div><div style="font-size:12px;font-weight:700;color:#fff;margin-top:4px;line-height:1.4">'+(obj.venue||'--')+'</div></div></div>'
   // Pax
   +'<div style="display:flex;gap:28px;margin-bottom:'+(obj.remarks?'12px':'20px')+';font-size:13px">'
-  +'<div><span style="color:#8A6540">Adults: </span><strong>'+(obj.pax?.adults||0)+'</strong></div>'
-  +'<div><span style="color:#8A6540">Kids: </span><strong>'+(obj.pax?.kids||0)+'</strong></div>'
-  +'<div><span style="color:#8A6540">Total Pax: </span><strong>'+paxTotal+'</strong></div></div>'
+  +'<div><span style="color:#8A6540;font-weight:700">Adults: </span><strong>'+(obj.pax?.adults||0)+'</strong></div>'
+  +'<div><span style="color:#8A6540;font-weight:700">Kids: </span><strong>'+(obj.pax?.kids||0)+'</strong></div>'
+  +'<div><span style="color:#8A6540;font-weight:700">Total Pax: </span><strong>'+paxTotal+'</strong></div></div>'
   +(obj.remarks?'<div style="background:#FDF6EE;border-left:4px solid #8A6540;padding:11px 16px;border-radius:4px;margin-bottom:16px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8A6540;margin-bottom:4px">Remarks</div><div style="font-size:13px;line-height:1.6">'+obj.remarks+'</div></div>':'')
-  +'</div>'
-  +'<div id="pdf-body" style="padding:16px 52px 44px;background:#fff">'
   // FOOD PACKAGES header (orange) + table with orange sub-header
   +'<div style="display:flex;justify-content:space-between;background:#C4552A;color:#fff;padding:11px 14px;font-size:14px;font-weight:700;border-radius:4px 4px 0 0">'
   +'<span>FOOD PACKAGES</span><span>S$ '+foodTotal.toFixed(2)+'</span></div>'
@@ -767,18 +790,12 @@ function genA4HTML(obj,type){
   +'</tr></thead><tbody>'+foodRows+'</tbody></table>'
   // ADDITIONAL CHARGES (orange) if any
   +addSection
-  // MANUAL MENU TEXT (if typed/pasted by user)
-  +(obj.menuText?
-    '<div style="background:#FDF6EE;border:1px solid #E2D0B8;border-radius:0 0 6px 6px;padding:14px 16px;margin-top:0;margin-bottom:0">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Menu Details</div>'
-    +'<div style="font-size:13px;white-space:pre-wrap;line-height:1.7;color:#1A0C04">'+obj.menuText+'</div>'
-    +'</div>'
-  :'')
+  // MANUAL MENU TEXT moved to last page — see below near signatures
   // TOTALS — right-aligned box
   +'<div style="display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:16px"><div style="width:270px">'
   +discRowPDF
-  +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#8A6540">Subtotal</span><span>S$ '+subAmt.toFixed(2)+'</span></div>'
-  +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#D4922A">GST (9%)</span><span>S$ '+gstAmt.toFixed(2)+'</span></div>'
+  +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#8A6540;font-weight:700">Subtotal</span><span>S$ '+subAmt.toFixed(2)+'</span></div>'
+  +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#D4922A;font-weight:700">GST (9%)</span><span>S$ '+gstAmt.toFixed(2)+'</span></div>'
   +'<div style="display:flex;justify-content:space-between;padding:11px 12px;font-size:16px;font-weight:700;background:#C4552A;color:#fff;border-radius:4px;margin-top:3px"><span>GRAND TOTAL</span><span>S$ '+grand.toFixed(2)+'</span></div>'
   +advSection
   +'</div></div>'
@@ -800,36 +817,36 @@ function genA4HTML(obj,type){
   +'<div style="flex-shrink:0;text-align:center">'
   +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#C4552A;margin-bottom:6px">PayNow</div>'
   +'<img src="'+PAYNOW_QR_STATIC+'" style="width:115px;height:115px;border:2px solid #C4552A;border-radius:8px;background:#fff">'
-  +'<div style="font-size:10px;color:#8A6540;margin-top:5px;font-weight:600">UEN: 201510984RPN2</div>'
+  +'<div style="font-size:10px;color:#8A6540;margin-top:5px;font-weight:700">UEN: 201510984RPN2</div>'
   +'</div>'
   +'</div></div>'
   // Terms & Conditions
   +'<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Terms &amp; Conditions</div>'
   +'<ol style="padding-left:18px">'+termsHtml+'</ol></div>'
-  // Signatures
+  // Signatures (menu details added as a separate last page via xPDF/waWithPDF)
   +(isQ
     ?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:72px">'
      +'<div style="border-top:2px solid #1A0C04;padding-top:10px;text-align:center">'
      +'<div style="font-size:13px;font-weight:700;color:#1A0C04">Customer Acknowledgement</div>'
-     +'<div style="font-size:11px;color:#8A6540;margin-top:2px">Customer Signature &amp; Date</div>'
+     +'<div style="font-size:11px;color:#8A6540;font-weight:700;margin-top:2px">Customer Signature &amp; Date</div>'
      +'</div>'
      +'<div style="border-top:2px solid #1A0C04;padding-top:10px;text-align:center">'
      +'<div style="font-size:13px;font-weight:700;color:#1A0C04">Authorised Signature</div>'
-     +'<div style="font-size:11px;color:#8A6540;margin-top:2px">Urban Roti Catering &amp; Events</div>'
+     +'<div style="font-size:11px;color:#8A6540;font-weight:700;margin-top:2px">Urban Roti Catering &amp; Events</div>'
      +'</div>'
      +'</div>'
     :'<div style="display:flex;justify-content:flex-end;margin-top:72px">'
      +'<div style="border-top:2px solid #1A0C04;padding-top:10px;width:260px;text-align:center">'
      +'<div style="font-size:13px;font-weight:700;color:#1A0C04">Authorised Signature</div>'
-     +'<div style="font-size:11px;color:#8A6540;margin-top:2px">Urban Roti Catering &amp; Events</div>'
+     +'<div style="font-size:11px;color:#8A6540;font-weight:700;margin-top:2px">Urban Roti Catering &amp; Events</div>'
      +'</div>'
      +'</div>'
   )
   // Footer
   +'<div style="margin-top:28px;padding-top:13px;border-top:2px solid #1A0C04;display:flex;justify-content:space-between;align-items:center">'
   +'<div><div style="font-size:13px;font-weight:700">Urban Roti Catering &amp; Events</div>'
-  +'<div style="font-size:11px;color:#8A6540">101 Syed Alwi Road, Singapore 207677 | www.urbanroti.com.sg | +65 6209 5545</div></div>'
-  +'<div style="text-align:right;font-size:11px;color:#8A6540"><div>'+obj.id+'</div><div>'+validityNote+'</div></div>'
+  +'<div style="font-size:11px;color:#8A6540;font-weight:700">101 Syed Alwi Road, Singapore 207677 | www.urbanroti.com.sg | +65 6209 5545</div></div>'
+  +'<div style="text-align:right;font-size:11px;color:#8A6540;font-weight:700"><div>'+obj.id+'</div><div>'+validityNote+'</div></div>'
   +'</div>'
   +'</div>'
   +'</div>';
@@ -897,6 +914,56 @@ function fixPageBreaks(wrap){
   });
 }
 
+// ── MENU TEXT — dedicated last page(s) after signature ──
+async function addMenuTextPageToPDF(pdf,obj,headerData,hdrH,pdfW,pdfH,gapH,footerH){
+  if(!obj.menuText)return;
+  // Render menu content as an image (same 794px width as main doc)
+  var mWrap=document.createElement('div');
+  mWrap.style.cssText='position:fixed;left:-9999px;top:0;width:690px;background:#fff;font-family:Arial,Helvetica,sans-serif;padding:0;box-sizing:border-box;';
+  mWrap.innerHTML='<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid #C4552A">Menu Details</div>'
+    +'<div style="font-size:13px;white-space:pre-wrap;line-height:1.9;color:#1A0C04">'+obj.menuText+'</div>';
+  document.body.appendChild(mWrap);
+  await new Promise(r=>setTimeout(r,150));
+  try{
+    var mCanvas=await html2canvas(mWrap,{scale:2,useCORS:true,backgroundColor:'#fff',width:690,windowWidth:690});
+    document.body.removeChild(mWrap);
+    var mData=mCanvas.toDataURL('image/png');
+    // 690px content width → in mm relative to 794px page width
+    var lPad=Math.round(52*pdfW/794*100)/100;   // 52px left padding in mm
+    var cW=Math.round(690*pdfW/794*100)/100;     // 690px in mm
+    var mTotalH=Math.round(mCanvas.height*cW/mCanvas.width*100)/100;
+    var availH=pdfH-hdrH-gapH-footerH;
+    var mPages=Math.ceil(mTotalH/availH);
+    var mOffset=0;
+    for(var mp=1;mp<=mPages;mp++){
+      pdf.addPage();
+      // Place content (shifted so correct slice is visible)
+      var mImgY=hdrH+gapH-mOffset;
+      pdf.addImage(mData,'PNG',lPad,mImgY,cW,mTotalH);
+      // White out header + footer zones
+      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrH+gapH,'F');
+      pdf.setFillColor(255,255,255);pdf.rect(0,pdfH-footerH,pdfW,footerH,'F');
+      // Repeating header
+      if(headerData)pdf.addImage(headerData,'PNG',0,0,pdfW,hdrH);
+      // Separator lines
+      pdf.setDrawColor(226,208,184);pdf.setLineWidth(0.4);
+      pdf.line(10,hdrH+gapH-1,pdfW-10,hdrH+gapH-1);
+      pdf.line(10,pdfH-footerH+2,pdfW-10,pdfH-footerH+2);
+      // Gap label
+      pdf.setFontSize(7.5);pdf.setTextColor(140,101,64);
+      pdf.setFont(undefined,'italic');
+      pdf.text('Menu Details'+(mPages>1?' ('+ mp+' of '+mPages+')':''),10,hdrH+5);
+      pdf.setFont(undefined,'normal');
+      // Page label at bottom
+      pdf.setFontSize(8.5);
+      pdf.text('Menu Details',pdfW/2,pdfH-8,{align:'center'});
+      mOffset+=availH;
+    }
+  }catch(e){
+    if(document.body.contains(mWrap))document.body.removeChild(mWrap);
+  }
+}
+
 // ── [FIX 3] A4 MULTI-PAGE PDF EXPORT ──
 async function xPDF(id,type){
   const obj=type==='quote'?DB.quotes().find(x=>x.id===id):DB.invs().find(x=>x.id===id);if(!obj)return;
@@ -925,40 +992,53 @@ async function xPDF(id,type){
     const totalImgH=Math.round(canvas.height*pdfW/canvas.width*100)/100;
     const hdrH=headerCanvas?Math.round(headerCanvas.height*pdfW/headerCanvas.width*100)/100:0;
 
-    // Usable content height on pages 2+ (header + margins eat into it)
-    const subPageContent=pdfH-hdrH-7;
+    // Usable content height on pages 2+ (header + footer strip + margins)
+    const footerStripH=22; // 3 lines breathing room at bottom
+    const gapH=13;          // gap below repeated header (for "Continued from" + 1 blank line)
+    const subPageContent=pdfH-hdrH-footerStripH-gapH;
     const totalPages=totalImgH<=pdfH?1:1+Math.ceil((totalImgH-pdfH)/subPageContent);
 
     // ── PAGE 1: full content from top ──
     pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgH);
+    // White footer strip so content doesn't bleed into page-number area
+    pdf.setFillColor(255,255,255);pdf.rect(0,pdfH-footerStripH,pdfW,footerStripH,'F');
+    // Thin separator above footer
+    pdf.setDrawColor(226,208,184);pdf.setLineWidth(0.4);pdf.line(10,pdfH-footerStripH+2,pdfW-10,pdfH-footerStripH+2);
     pdf.setFontSize(8.5);pdf.setTextColor(140,101,64);
-    pdf.text('Page 1'+(totalPages>1?' of '+totalPages:''),pdfW-10,pdfH-3,{align:'right'});
-    if(totalPages>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2 \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+    pdf.text('Page 1'+(totalPages>1?' of '+totalPages:''),pdfW-10,pdfH-8,{align:'right'});
+    if(totalPages>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2  >>',10,pdfH-8);pdf.setFont(undefined,'normal');}
 
     // ── PAGES 2+ : repeating header + content slice ──
     var contentStart=pdfH;
     for(var pg=2;pg<=totalPages;pg++){
       pdf.addPage();
-      // Place content image so that contentStart aligns to just below header
-      var imgY=hdrH+4-contentStart;
+      // Place content image so that contentStart aligns to just below header+gap
+      var imgY=hdrH+gapH-contentStart;
       pdf.addImage(imgData,'PNG',0,imgY,pdfW,totalImgH);
-      // White out the header zone (content image bleeds there)
-      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrH+4,'F');
+      // White out the header zone + gap (content image bleeds there)
+      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrH+gapH,'F');
+      // White footer strip (prevent T&C / content bleeding into footer)
+      pdf.setFillColor(255,255,255);pdf.rect(0,pdfH-footerStripH,pdfW,footerStripH,'F');
+      // Thin separator lines at header bottom and footer top
+      pdf.setDrawColor(226,208,184);pdf.setLineWidth(0.4);
+      pdf.line(10,hdrH+gapH-1,pdfW-10,hdrH+gapH-1);
+      pdf.line(10,pdfH-footerStripH+2,pdfW-10,pdfH-footerStripH+2);
       // Repeating header
       if(headerData)pdf.addImage(headerData,'PNG',0,0,pdfW,hdrH);
-      // "Continued from page X"
+      // "Continued from page X" — inside gap, with 1 blank line below before content starts
       pdf.setFontSize(7.5);pdf.setTextColor(140,101,64);
       pdf.setFont(undefined,'italic');
-      pdf.text('\u2190 Continued from Page '+(pg-1),10,hdrH+3.5);
+      pdf.text('<< Continued from Page '+(pg-1),10,hdrH+5);
       pdf.setFont(undefined,'normal');
       // Page number
       pdf.setFontSize(8.5);
-      pdf.text('Page '+pg+' of '+totalPages,pdfW-10,pdfH-3,{align:'right'});
+      pdf.text('Page '+pg+' of '+totalPages,pdfW-10,pdfH-8,{align:'right'});
       // "Continued on next page" if not last
-      if(pg<totalPages){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pg+1)+' \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+      if(pg<totalPages){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pg+1)+'  >>',10,pdfH-8);pdf.setFont(undefined,'normal');}
       contentStart+=subPageContent;
     }
 
+    await addMenuTextPageToPDF(pdf,obj,headerData,hdrH,pdfW,pdfH,gapH,footerStripH);
     await addMenuToPDF(pdf,obj);
     pdf.save(`${id}.pdf`);toast('PDF downloaded!','ok');
   }catch(e){
@@ -994,31 +1074,38 @@ async function waWithPDF(type,id){
     const pdfW=210,pdfH=297;
     const totalImgHW=Math.round(canvas.height*pdfW/canvas.width*100)/100;
     const hdrHW=headerCanvasW?Math.round(headerCanvasW.height*pdfW/headerCanvasW.width*100)/100:0;
-    const subPageContentW=pdfH-hdrHW-7;
+    const subPageContentW=pdfH-hdrHW-22-13;
     const totalPagesW=totalImgHW<=pdfH?1:1+Math.ceil((totalImgHW-pdfH)/subPageContentW);
 
     // Page 1
     pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgHW);
+    pdf.setFillColor(255,255,255);pdf.rect(0,pdfH-22,pdfW,22,'F');
+    pdf.setDrawColor(226,208,184);pdf.setLineWidth(0.4);pdf.line(10,pdfH-20,pdfW-10,pdfH-20);
     pdf.setFontSize(8.5);pdf.setTextColor(140,101,64);
-    pdf.text('Page 1'+(totalPagesW>1?' of '+totalPagesW:''),pdfW-10,pdfH-3,{align:'right'});
-    if(totalPagesW>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2 \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+    pdf.text('Page 1'+(totalPagesW>1?' of '+totalPagesW:''),pdfW-10,pdfH-8,{align:'right'});
+    if(totalPagesW>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2  >>',10,pdfH-8);pdf.setFont(undefined,'normal');}
 
     var contentStartW=pdfH;
     for(var pgW=2;pgW<=totalPagesW;pgW++){
       pdf.addPage();
-      var imgYW=hdrHW+4-contentStartW;
+      var imgYW=hdrHW+13-contentStartW;
       pdf.addImage(imgData,'PNG',0,imgYW,pdfW,totalImgHW);
-      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrHW+4,'F');
+      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrHW+13,'F');
+      pdf.setFillColor(255,255,255);pdf.rect(0,pdfH-22,pdfW,22,'F');
+      pdf.setDrawColor(226,208,184);pdf.setLineWidth(0.4);
+      pdf.line(10,hdrHW+12,pdfW-10,hdrHW+12);
+      pdf.line(10,pdfH-20,pdfW-10,pdfH-20);
       if(headerDataW)pdf.addImage(headerDataW,'PNG',0,0,pdfW,hdrHW);
       pdf.setFontSize(7.5);pdf.setTextColor(140,101,64);
       pdf.setFont(undefined,'italic');
-      pdf.text('\u2190 Continued from Page '+(pgW-1),10,hdrHW+3.5);
+      pdf.text('<< Continued from Page '+(pgW-1),10,hdrHW+5);
       pdf.setFont(undefined,'normal');
       pdf.setFontSize(8.5);
-      pdf.text('Page '+pgW+' of '+totalPagesW,pdfW-10,pdfH-3,{align:'right'});
-      if(pgW<totalPagesW){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pgW+1)+' \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+      pdf.text('Page '+pgW+' of '+totalPagesW,pdfW-10,pdfH-8,{align:'right'});
+      if(pgW<totalPagesW){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pgW+1)+'  >>',10,pdfH-8);pdf.setFont(undefined,'normal');}
       contentStartW+=subPageContentW;
     }
+    await addMenuTextPageToPDF(pdf,obj,headerDataW,hdrHW,pdfW,pdfH,13,22);
     await addMenuToPDF(pdf,obj);
     pdfBlob=pdf.output('blob');
   }catch(e){
@@ -1181,7 +1268,14 @@ document.addEventListener('DOMContentLoaded',function(){
 if('serviceWorker' in navigator && location.protocol !== 'file:'){
   window.addEventListener('load',function(){
     fetch('./sw.js',{method:'HEAD'}).then(function(r){
-      if(r.ok)navigator.serviceWorker.register('./sw.js').catch(function(){});
+      if(r.ok){
+        navigator.serviceWorker.register('./sw.js').then(function(reg){
+          // When a new SW activates (cache cleared), reload the page to get fresh files
+          navigator.serviceWorker.addEventListener('controllerchange',function(){
+            window.location.reload();
+          });
+        }).catch(function(){});
+      }
     }).catch(function(){});
   });
 }
