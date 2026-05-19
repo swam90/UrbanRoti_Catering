@@ -194,6 +194,9 @@ body{font-family:'Nunito',sans-serif;color:var(--ink);font-size:15px;line-height
 .disc-row{display:flex;gap:8px;margin-bottom:10px}
 .disc-btn{flex:1;padding:10px;border-radius:var(--r3);border:2px solid var(--border);background:#fff;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;text-align:center;transition:.15s}
 .disc-btn.on{border-color:#2A7A50;background:rgba(42,122,80,.08);color:#2A7A50}
+.ed-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.ed-row input[type="date"]{flex:1;padding:11px 12px;border:2px solid var(--border);border-radius:var(--r3);font-family:'Nunito',sans-serif;font-size:14px;font-weight:600;color:var(--ink);background:#fff;transition:.2s}
+.ed-row input[type="date"]:focus{outline:none;border-color:var(--clay)}
 </style>
 </head>
 <body>
@@ -294,16 +297,17 @@ const fdl=d=>{if(!d)return'';return new Date(d+'T00:00:00').toLocaleDateString('
 function go(s){document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.ni').forEach(e=>e.classList.remove('on'));document.getElementById('s-'+s).classList.add('active');const n=document.getElementById('n-'+s);if(n)n.classList.add('on');if(s==='home'){dash();renderHome()}if(s==='history')renderHist()}
 
 // ── WIZARD STATE ──
-var step=0,wd={},pis=[],acs=[],mf=null,editingId=null;
+var step=0,wd={},pis=[],acs=[],eds=[],mf=null,editingId=null;
 const STPS=[['Event Setup','Step 1 of 4'],['Pax & Pricing','Step 2 of 4'],['Extra & Terms','Step 3 of 4'],['Review','Step 4 of 4']];
 
-function newQ(){editingId=null;step=0;wd={};pis=[{n:'Adults Package',p:'',t:'adults',q:0},{n:'Kids Meal',p:'',t:'kids',q:0}];acs=[];mf=null;render();go('wizard')}
+function newQ(){editingId=null;step=0;wd={};pis=[{n:'Adults Package',p:'',t:'adults',q:0},{n:'Kids Meal',p:'',t:'kids',q:0}];acs=[];eds=[''];mf=null;render();go('wizard')}
 
 // [FIX 4] Edit quote — pre-fills wizard with existing data
 function editQ(id){
   const q=DB.quotes().find(x=>x.id===id);if(!q)return;
   editingId=id;step=0;
   wd={fn:q.from?.name||'',fc:q.from?.contact||'',cn:q.customer?.name||'',cc:q.customer?.contact||'',ve:q.venue||'',ed:q.eventDate||'',sl:q.slot||'',ts:q.timeStart||'',te:q.timeEnd||'',pa:q.pax?.adults||0,pk:q.pax?.kids||0,wt:q.terms||TERMS,rm:q.remarks||'',menuText:q.menuText||'',discType:q.discount?.type||'amt',discVal:q.discount?.value||0};
+  eds=(q.eventDates&&q.eventDates.length)?[...q.eventDates]:[q.eventDate||''];
   pis=(q.pricingItems||[]).map(p=>({n:p.packageName,p:p.unitPrice,t:p.paxType,q:p.customQty||0}));
   acs=(q.additionalCosts||[]).map(c=>({d:c.description||c.d||'',a:c.amount||c.a||0}));
   mf=q.menuFile||null;
@@ -358,6 +362,19 @@ function setDiscType(t){
   if(inp){inp.placeholder=t==='pct'?'e.g. 10':'0.00';if(t==='pct')inp.setAttribute('max','100');else inp.removeAttribute('max');}
 }
 
+// ── MULTI-DATE HELPERS ──
+function edRows(){
+  if(!eds.length)eds=[''];
+  return eds.map(function(d,i){
+    return '<div class="ed-row">'
+      +'<input type="date" value="'+d+'" oninput="eds['+i+']=this.value">'
+      +(i>0?'<button class="del" onclick="rmED('+i+')">×</button>':'<div style="width:34px"></div>')
+      +'</div>';
+  }).join('');
+}
+function addED(){eds.push('');var c=document.getElementById('ed-list');if(c)c.innerHTML=edRows();}
+function rmED(i){eds.splice(i,1);var c=document.getElementById('ed-list');if(c)c.innerHTML=edRows();}
+
 function s0(){
   var ts12=to12hr(wd.ts);
   var hrs=[12,1,2,3,4,5,6,7,8,9,10,11];
@@ -382,7 +399,7 @@ function s0(){
     +'oninput="var v=this.value.replace(/[^0-9]/g,\'\').slice(0,6);this.value=v;wd.postal=v;if(v.length===6)fetchPostal(v)"></div>'
     +'<div id="postal-status" class="postal-status"></div></div>'
     +'<div class="fld"><label>Venue / Address *</label><input id="ve" value="'+(wd.ve||'')+'" placeholder="Full venue address"></div>'
-        +'<div class="fld"><label>Event Date *</label><input id="ed" type="date" value="'+(wd.ed||'')+'"></div>'
+        +'<div class="fld"><label>Event Date(s) * <span style="font-weight:600;text-transform:none;font-size:10px">(tap + to add multiple dates)</span></label><div id="ed-list">'+edRows()+'</div><button class="add-r" style="margin-top:4px" onclick="addED()">+ Add Another Date</button></div>'
     +'<div class="fld"><label>Start Time *</label>'
     +'<div class="time-sel"><select id="ts-h" class="ts-s">'+hOpts+'</select><span class="ts-colon">:</span>'
     +'<select id="ts-m" class="ts-s">'+mOpts+'</select>'
@@ -435,7 +452,7 @@ function s3(){
     +'<div style="font-size:11px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Event Summary</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:13px">'
     +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Customer</div><div style="font-weight:700">'+(wd.cn||'—')+'</div></div>'
-    +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Date</div><div style="font-weight:700">'+(fd(wd.ed)||'—')+'</div></div>'
+    +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Date'+(eds.filter(Boolean).length>1?'s':'')+'</div><div style="font-weight:700">'+(eds.filter(Boolean).map(function(d){return fd(d)}).join('<br>')||'—')+'</div></div>'
     +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Venue</div><div style="font-weight:700;font-size:12px">'+(wd.ve||'—')+'</div></div>'
     +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Slot / Time</div><div style="font-weight:700">'+(wd.sl||'—')+' '+(t12(wd.ts)||'')+'</div></div>'
     +'<div><div style="color:var(--muted);font-size:10px;font-weight:700">Pax</div><div style="font-weight:700">'+pa+' Adults'+(pk?' + '+pk+' Kids':'')+'</div></div>'
@@ -467,7 +484,8 @@ function s3(){
 
 function saveWD(){
   if(step===0){
-    ['fn','fc','cn','cc','ve','ed'].forEach(function(id){var e=document.getElementById(id);if(e)wd[id]=e.value});
+    ['fn','fc','cn','cc','ve'].forEach(function(id){var e=document.getElementById(id);if(e)wd[id]=e.value});
+    wd.ed=eds[0]||''; // primary date (first in array)
     var rmEl0=document.getElementById('rm');if(rmEl0)wd.rm=rmEl0.value;
     // 12hr time selects → save as HH:MM 24hr
     var tsH=document.getElementById('ts-h')?.value,tsM=document.getElementById('ts-m')?.value,tsAP=document.getElementById('ts-ap')?.value;
@@ -478,8 +496,9 @@ function saveWD(){
 }
 function validate(){
   if(step===0){
-    var req=[['fn','Your name'],['cn','Customer name'],['ve','Venue'],['ed','Event date']];
+    var req=[['fn','Your name'],['cn','Customer name'],['ve','Venue']];
     for(var k=0;k<req.length;k++){var e=document.getElementById(req[k][0]);if(!e?.value.trim()){toast('Please fill: '+req[k][1],'err');e?.focus();return false}}
+    if(!eds[0]){toast('Please fill: Event date','err');return false}
     var fc=(document.getElementById('fc')?.value||'').replace(/\D/g,'');
     if(fc.length!==8){toast('Your contact must be exactly 8 digits','err');document.getElementById('fc')?.focus();return false}
     var cc=(document.getElementById('cc')?.value||'').replace(/\D/g,'');
@@ -516,9 +535,9 @@ function generate(){
   if(editingId){
     // [FIX 4] Update existing quote
     const idx=qs.findIndex(x=>x.id===editingId);
-    if(idx>=0){qs[idx]={...qs[idx],from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};DB.sq(qs);toast(`${editingId} updated!`,'ok');const id=editingId;editingId=null;oSheet(id,'quote');go('history');}
+    if(idx>=0){qs[idx]={...qs[idx],from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};DB.sq(qs);toast(`${editingId} updated!`,'ok');const id=editingId;editingId=null;oSheet(id,'quote');go('history');}
   } else {
-    const q={id:DB.nq(),createdAt:new Date().toISOString(),status:'draft',from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};
+    const q={id:DB.nq(),createdAt:new Date().toISOString(),status:'draft',from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};
     qs.unshift(q);DB.sq(qs);toast(`${q.id} generated!`,'ok');oSheet(q.id,'quote');go('home');
   }
 }
@@ -532,7 +551,7 @@ function oSheet(id,type){
   if(type==='invoice'){
     var adv=obj.advancePayment||0;
     var grand=obj.grandTotal||0;
-    var bal=Math.max(0,grand-adv);
+    var balDiff=grand-adv; // positive = owed, negative = refund
     var isFullPaid=obj.status==='paid'||adv>=grand;
     bodyHtml='<div style="background:'+(isFullPaid?'#E0F2E8':'#F0FAF4')+';border:2px solid '+(isFullPaid?'#2A7A50':'#A8D8BE')+';border-radius:var(--r);padding:14px;margin-bottom:14px">'
       +'<div style="font-size:11px;font-weight:900;color:#2A7A50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">💰 Advance Payment</div>'
@@ -540,10 +559,15 @@ function oSheet(id,type){
         ?'<div style="font-size:18px;font-weight:900;color:#2A7A50;text-align:center;padding:8px;letter-spacing:1px">✅ FULLY PAID</div>'
         :'<div style="display:flex;gap:8px;align-items:center">'
          +'<div class="pfx" style="flex:1"><div class="pfx-l">S$</div>'
-         +'<input type="number" id="adv-input" min="0" step="0.01" max="'+grand.toFixed(2)+'" value="'+(adv>0?adv:'')+'" placeholder="0.00" style="font-size:15px;font-weight:700"></div>'
+         +'<input type="number" id="adv-input" min="0" step="0.01" value="'+(adv>0?adv:'')+'" placeholder="0.00" style="font-size:15px;font-weight:700"></div>'
          +'<button class="btn-pill" style="padding:11px 18px;font-size:13px;background:#2A7A50;flex-shrink:0" data-id="'+id+'" onclick="saveAdvPay(this.dataset.id)">Save</button>'
          +'</div>'
-         +(adv>0?'<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid #A8D8BE;font-size:13px;font-weight:700"><span style="color:#8A6540">Balance Payable</span><span style="color:#2A7A50">S$ '+bal.toFixed(2)+'</span></div>':'')
+         +(adv>0
+           ?(balDiff>0
+             ?'<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid #A8D8BE;font-size:13px;font-weight:700"><span style="color:#8A6540">Balance Payable</span><span style="color:#C0392B">S$ '+balDiff.toFixed(2)+'</span></div>'
+             :'<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid #A8D8BE;font-size:13px;font-weight:700"><span style="color:#8A6540">Refund Amount</span><span style="color:#1A6BBF">S$ '+Math.abs(balDiff).toFixed(2)+'</span></div>'
+           )
+           :'')
       )
       +'</div>';
   }
@@ -569,7 +593,8 @@ function saveAdvPay(id){
   invs[idx].advancePayment=amount;
   if(amount>0&&amount>=(invs[idx].grandTotal||0)){
     invs[idx].status='paid';
-    toast('Invoice FULLY PAID 🎉','ok');
+    var isRefund=amount>(invs[idx].grandTotal||0);
+    toast(isRefund?'Advance exceeds total — Refund due 💙':'Invoice FULLY PAID 🎉','ok');
   } else {
     toast('Advance payment saved','ok');
   }
@@ -579,7 +604,16 @@ function saveAdvPay(id){
 }
 
 // ── DOCUMENT MINI (sheet preview) ──
-function docMini(obj,type){const isQ=type==='quote';const items=obj.pricingItems||(obj.unitPrice?[{packageName:obj.menuName||'Catering',unitPrice:obj.unitPrice,qty:(obj.pax?.adults||0)+(obj.pax?.kids||0),amount:obj.foodTotal||0}]:[]);const addc=obj.additionalCosts||[];const ml=obj.menuFile?`<br><a href="${obj.menuFile.data}" target="_blank" style="color:#C4552A;font-size:9px">📎 ${obj.menuFile.name}</a>`:'';const rows=items.map((it,i)=>`<tr><td><b>${it.packageName}</b>${i===0?ml:''}</td><td>${it.qty}</td><td>S$ ${(+it.unitPrice||0).toFixed(2)}</td><td>S$ ${(+it.amount||0).toFixed(2)}</td></tr>`).join('');const arows=addc.map(c=>`<tr><td colspan="3">${c.description||c.d||'Charge'}</td><td>S$ ${(+c.amount||+c.a||0).toFixed(2)}</td></tr>`).join('');const tl=(obj.terms||TERMS).split('\n').filter(l=>l.trim()).map(l=>`<li>${l.replace(/^\d+\.\s*/,'')}</li>`).join('');const tr2=obj.timeStart?`${t12(obj.timeStart)}${obj.timeEnd?' – '+t12(obj.timeEnd):''}`:'-';return`<div class="dm" id="dm-r"><div class="dmh"><div class="dmlo"><div class="dmlb"><img src="${LOGO_B64}" style="width:100%;height:100%;object-fit:contain;padding:2px"></div><div><div class="dmco">Urban Roti</div><div class="dmcs">Catering & Events</div><div class="dmci">📞 +65 6209 5545 · urbanroti.com.sg</div></div></div><div><div class="dmty">${isQ?'Quotation':'Invoice'}</div><div class="dmnu">${obj.id}</div><div class="dmnu">${isQ?fdl(obj.createdAt?.split('T')[0]):fdl(obj.invoiceDate)}</div></div></div><div class="dmpar"><div class="dmp"><div class="dmpl">${isQ?'From':'Billed By'}</div><div class="dmpn">${isQ?obj.from?.name:'Urban Roti'}</div><div class="dmpi">${isQ?obj.from?.contact||'':''}</div></div><div class="dmp to"><div class="dmpl">${isQ?'Quotation For':'Billed To'}</div><div class="dmpn">${obj.customer?.name}</div><div class="dmpi">📱 ${obj.customer?.contact||''}</div></div></div><div class="dmev"><div><div class="dmel">Event Date</div><div class="dmev2 hi">${fdl(obj.eventDate)}</div></div><div><div class="dmel">Slot</div><div class="dmev2">${obj.slot||'—'}</div></div><div><div class="dmel">Time</div><div class="dmev2">${tr2}</div></div><div><div class="dmel">Venue</div><div class="dmev2" style="font-size:9px">${obj.venue||'—'}</div></div></div><table class="dmt"><thead><tr><th>Package</th><th>Pax</th><th>Unit</th><th>Amount</th></tr></thead><tbody>${rows}${arows}</tbody></table><div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div class="dmto"><div class="dmtr"><span>Food Cost</span><span>S$ ${(obj.foodTotal||0).toFixed(2)}</span></div>${(obj.addTotal||0)>0?`<div class="dmtr"><span>Additional</span><span>S$ ${obj.addTotal.toFixed(2)}</span></div>`:''}${(obj.discountAmount||0)>0?`<div class="dmtr" style="background:#EAF7EE"><span style="color:#2A7A50">Discount${obj.discount?.type==='pct'?' ('+obj.discount.value+'%)':''}  </span><span style="color:#2A7A50">-S$ ${(obj.discountAmount||0).toFixed(2)}</span></div>`:''}<div class="dmtr"><span>Subtotal</span><span>S$ ${(obj.subtotal||0).toFixed(2)}</span></div><div class="dmtr"><span>GST 9%</span><span>S$ ${(obj.gst||0).toFixed(2)}</span></div><div class="dmtr gd"><span>TOTAL</span><span>S$ ${(obj.grandTotal||0).toFixed(2)}</span></div>${!isQ&&(obj.advancePayment||0)>0?`<div class="dmtr" style="background:#2A7A50"><span>Less: Advance</span><span>-S$ ${obj.advancePayment.toFixed(2)}</span></div><div class="dmtr" style="background:#1A6BBF;font-weight:700"><span>BALANCE DUE</span><span>S$ ${Math.max(0,(obj.grandTotal||0)-obj.advancePayment).toFixed(2)}</span></div>`:''}${!isQ&&(obj.status==='paid'||(obj.advancePayment||0)>=(obj.grandTotal||0))?'<div class="dmtr" style="background:#2A7A50;font-size:11px;letter-spacing:1px;text-align:center;justify-content:center"><span>✅ FULLY PAID</span></div>':''}</div></div><div class="dmw"><b>Amount in Words:</b> ${words(obj.grandTotal||0)}</div><div class="dmte"><div class="dmte-t">Terms & Conditions</div><ol>${tl}</ol></div></div>`}
+function docMini(obj,type){const isQ=type==='quote';const items=obj.pricingItems||(obj.unitPrice?[{packageName:obj.menuName||'Catering',unitPrice:obj.unitPrice,qty:(obj.pax?.adults||0)+(obj.pax?.kids||0),amount:obj.foodTotal||0}]:[]);const addc=obj.additionalCosts||[];const ml=obj.menuFile?`<br><a href="${obj.menuFile.data}" target="_blank" style="color:#C4552A;font-size:9px">📎 ${obj.menuFile.name}</a>`:'';const rows=items.map((it,i)=>`<tr><td><b>${it.packageName}</b>${i===0?ml:''}</td><td>${it.qty}</td><td>S$ ${(+it.unitPrice||0).toFixed(2)}</td><td>S$ ${(+it.amount||0).toFixed(2)}</td></tr>`).join('');const arows=addc.map(c=>`<tr><td colspan="3">${c.description||c.d||'Charge'}</td><td>S$ ${(+c.amount||+c.a||0).toFixed(2)}</td></tr>`).join('');const tl=(obj.terms||TERMS).split('\n').filter(l=>l.trim()).map(l=>`<li>${l.replace(/^\d+\.\s*/,'')}</li>`).join('');const tr2=obj.timeStart?`${t12(obj.timeStart)}${obj.timeEnd?' – '+t12(obj.timeEnd):''}`:'-';
+  // Multi-date display
+  const eventDates=obj.eventDates&&obj.eventDates.length?obj.eventDates:[obj.eventDate];
+  const dateDisplay=eventDates.filter(Boolean).map(d=>fdl(d)).join(' &amp; ')||'—';
+  // Advance/balance/refund for invoice
+  const advPay=!isQ?(obj.advancePayment||0):0;
+  const grandAmt=obj.grandTotal||0;
+  const balDiff=grandAmt-advPay;
+  const advRows=!isQ&&advPay>0?`<div class="dmtr" style="background:#2A7A50"><span>Less: Advance</span><span>-S$ ${advPay.toFixed(2)}</span></div>`+(balDiff>0?`<div class="dmtr" style="background:#1A6BBF;font-weight:700"><span>BALANCE DUE</span><span>S$ ${balDiff.toFixed(2)}</span></div>`:`<div class="dmtr" style="background:#C0392B;font-weight:700"><span>${balDiff<0?'REFUND AMOUNT':'FULLY PAID'}</span><span>${balDiff<0?'S$ '+Math.abs(balDiff).toFixed(2):'✅'}</span></div>`):'';
+  return`<div class="dm" id="dm-r"><div class="dmh"><div class="dmlo"><div class="dmlb"><img src="${LOGO_B64}" style="width:100%;height:100%;object-fit:contain;padding:2px"></div><div><div class="dmco">Urban Roti</div><div class="dmcs">Catering & Events</div><div class="dmci">📞 +65 6209 5545 · urbanroti.com.sg</div></div></div><div><div class="dmty">${isQ?'Quotation':'Invoice'}</div><div class="dmnu">${obj.id}</div><div class="dmnu">${isQ?fdl(obj.createdAt?.split('T')[0]):fdl(obj.invoiceDate)}</div></div></div><div class="dmpar"><div class="dmp"><div class="dmpl">${isQ?'From':'Billed By'}</div><div class="dmpn">${isQ?obj.from?.name:'Urban Roti'}</div><div class="dmpi">${isQ?obj.from?.contact||'':''}</div></div><div class="dmp to"><div class="dmpl">${isQ?'Quotation For':'Billed To'}</div><div class="dmpn">${obj.customer?.name}</div><div class="dmpi">📱 ${obj.customer?.contact||''}</div></div></div><div class="dmev"><div><div class="dmel">Event Date${eventDates.filter(Boolean).length>1?'s':''}</div><div class="dmev2 hi">${dateDisplay}</div></div><div><div class="dmel">Slot</div><div class="dmev2">${obj.slot||'—'}</div></div><div><div class="dmel">Time</div><div class="dmev2">${tr2}</div></div><div><div class="dmel">Venue</div><div class="dmev2" style="font-size:9px">${obj.venue||'—'}</div></div></div><table class="dmt"><thead><tr><th>Package</th><th>Pax</th><th>Unit</th><th>Amount</th></tr></thead><tbody>${rows}${arows}</tbody></table><div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div class="dmto"><div class="dmtr"><span>Food Cost</span><span>S$ ${(obj.foodTotal||0).toFixed(2)}</span></div>${(obj.addTotal||0)>0?`<div class="dmtr"><span>Additional</span><span>S$ ${obj.addTotal.toFixed(2)}</span></div>`:''}${(obj.discountAmount||0)>0?`<div class="dmtr" style="background:#EAF7EE"><span style="color:#2A7A50">Discount${obj.discount?.type==='pct'?' ('+obj.discount.value+'%)':''}  </span><span style="color:#2A7A50">-S$ ${(obj.discountAmount||0).toFixed(2)}</span></div>`:''}<div class="dmtr"><span>Subtotal</span><span>S$ ${(obj.subtotal||0).toFixed(2)}</span></div><div class="dmtr"><span>GST 9%</span><span>S$ ${(obj.gst||0).toFixed(2)}</span></div><div class="dmtr gd"><span>TOTAL</span><span>S$ ${(obj.grandTotal||0).toFixed(2)}</span></div>${advRows}${!isQ&&(obj.status==='paid'||(obj.advancePayment||0)>=(obj.grandTotal||0))?'<div class="dmtr" style="background:#2A7A50;font-size:11px;letter-spacing:1px;text-align:center;justify-content:center"><span>✅ FULLY PAID</span></div>':''}</div></div><div class="dmw"><b>Amount in Words:</b> ${words(obj.grandTotal||0)}</div><div class="dmte"><div class="dmte-t">Terms & Conditions</div><ol>${tl}</ol></div></div>`}
 
 // ── A4 DOCUMENT HTML GENERATOR (Grouped pricing, orange accents, larger fonts) ──
 function genA4HTML(obj,type){
@@ -615,16 +649,27 @@ function genA4HTML(obj,type){
   var advPay=!isQ?(obj.advancePayment||0):0;
   var _grandForAdv=obj.grandTotal||0;
   var isFullyPaid=!isQ&&(obj.status==='paid'||advPay>=_grandForAdv);
-  var balance=Math.max(0,_grandForAdv-advPay);
+  var balDiff=_grandForAdv-advPay; // positive = balance due, negative/zero = refund/paid
   var advSection='';
   if(!isQ&&advPay>0&&!isFullyPaid){
+    // Balance still owed
     advSection=
       '<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6;background:#EAF7EE">'
       +'<span style="color:#2A7A50;font-weight:600">Less: Advance Payment</span>'
       +'<span style="color:#2A7A50;font-weight:700">- S$ '+advPay.toFixed(2)+'</span>'
       +'</div>'
       +'<div style="display:flex;justify-content:space-between;padding:11px 12px;font-size:16px;font-weight:700;background:#C0392B;color:#fff;border-radius:4px;margin-top:3px">'
-      +'<span>BALANCE PAYABLE</span><span>S$ '+balance.toFixed(2)+'</span>'
+      +'<span>BALANCE PAYABLE</span><span>S$ '+balDiff.toFixed(2)+'</span>'
+      +'</div>';
+  } else if(!isQ&&advPay>0&&advPay>_grandForAdv){
+    // Overpaid — show refund
+    advSection=
+      '<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6;background:#EAF7EE">'
+      +'<span style="color:#2A7A50;font-weight:600">Advance Payment Received</span>'
+      +'<span style="color:#2A7A50;font-weight:700">S$ '+advPay.toFixed(2)+'</span>'
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;padding:11px 12px;font-size:16px;font-weight:700;background:#1A6BBF;color:#fff;border-radius:4px;margin-top:3px">'
+      +'<span>REFUND AMOUNT</span><span>S$ '+Math.abs(balDiff).toFixed(2)+'</span>'
       +'</div>';
   } else if(isFullyPaid){
     advSection=
@@ -666,6 +711,9 @@ function genA4HTML(obj,type){
   var termsHtml=terms.map(function(l){
     return '<li style="font-size:12px;color:#5A3010;margin-bottom:5px;line-height:1.5">'+l.replace(/^\d+\.\s*/,'')+'</li>';
   }).join('');
+  // EVENT STRIP — now ORANGE background (same as Grand Total)
+  var eventDatesArr=obj.eventDates&&obj.eventDates.length?obj.eventDates:[obj.eventDate];
+  var eventDatesDisplay=eventDatesArr.filter(Boolean).map(function(d){return fdl(d)}).join(' &amp; ')||'--';
   return '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1A0C04;background:#fff}</style>'
   +'<div style="padding:44px 52px;background:#fff;min-height:1123px">'
   // HEADER — Urban Roti name now uses serif font to match QUOTATION character
@@ -694,9 +742,8 @@ function genA4HTML(obj,type){
   +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#D4922A;margin-bottom:6px">'+toLabel+'</div>'
   +'<div style="font-size:17px;font-weight:700">'+(obj.customer?.name||'')+'</div>'
   +'<div style="font-size:12px;color:#8A6540;margin-top:3px">'+(obj.customer?.contact||'')+'</div></div></div>'
-  // EVENT STRIP — now ORANGE background (same as Grand Total)
   +'<div style="background:#C4552A;border-radius:8px;padding:16px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">'
-  +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Event Date</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px">'+fdl(obj.eventDate)+'</div></div>'
+  +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Event Date'+(eventDatesArr.filter(Boolean).length>1?'s':'')+'</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px;line-height:1.4">'+eventDatesDisplay+'</div></div>'
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Slot</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px">'+(obj.slot||'--')+'</div></div>'
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Time</div><div style="font-size:15px;font-weight:700;color:#fff;margin-top:4px">'+tr2+'</div></div>'
   +'<div><div style="font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px">Venue</div><div style="font-size:12px;font-weight:700;color:#fff;margin-top:4px;line-height:1.4">'+(obj.venue||'--')+'</div></div></div>'
@@ -915,8 +962,8 @@ async function waWithPDF(type,id){
   const num=(obj.customer?.contact?.replace(/\D/g,'')||'');
   const waNum=num.startsWith('65')?num:'65'+num;
   const msg=type==='quote'
-    ?`Dear ${obj.customer.name},\n\nPlease find your Urban Roti catering quotation *${id}* attached.\n\n📅 ${fdl(obj.eventDate)} · ${obj.slot||''} · ${t12(obj.timeStart)||''}\n📍 ${obj.venue}\n👥 ${(obj.pax?.adults||0)+(obj.pax?.kids||0)} pax\n💰 Total: S$ ${(obj.grandTotal||0).toFixed(2)} (incl. 9% GST)\n\nKindly revert to confirm.\n\nUrban Roti Catering | +65 6209 5545`
-    :`Dear ${obj.customer.name},\n\nPlease find Invoice *${id}* attached.\n\n📅 ${fdl(obj.eventDate)}\n💰 Total Due: S$ ${(obj.grandTotal||0).toFixed(2)} (incl. GST)\nRef: ${id}\n\nThank you!\nUrban Roti Catering | +65 6209 5545`;
+    ?`Dear ${obj.customer.name},\n\nPlease find your Urban Roti catering quotation *${id}* attached.\n\n📅 ${obj.eventDates&&obj.eventDates.length>1?obj.eventDates.map(fdl).join(' & '):fdl(obj.eventDate)} · ${obj.slot||''} · ${t12(obj.timeStart)||''}\n📍 ${obj.venue}\n👥 ${(obj.pax?.adults||0)+(obj.pax?.kids||0)} pax\n💰 Total: S$ ${(obj.grandTotal||0).toFixed(2)} (incl. 9% GST)\n\nKindly revert to confirm.\n\nUrban Roti Catering | +65 6209 5545`
+    :`Dear ${obj.customer.name},\n\nPlease find Invoice *${id}* attached.\n\n📅 ${obj.eventDates&&obj.eventDates.length>1?obj.eventDates.map(fdl).join(' & '):fdl(obj.eventDate)}\n💰 Total Due: S$ ${(obj.grandTotal||0).toFixed(2)} (incl. GST)\nRef: ${id}\n\nThank you!\nUrban Roti Catering | +65 6209 5545`;
   // Try Web Share API with file
   if(navigator.canShare&&navigator.canShare({files:[file]})){
     try{
@@ -934,7 +981,7 @@ async function waWithPDF(type,id){
 
 function mail(type,id){const o=type==='quote'?DB.quotes().find(x=>x.id===id):DB.invs().find(x=>x.id===id);if(!o)return;const sub=type==='quote'?`Urban Roti Quotation ${o.id}`:`Urban Roti Invoice ${o.id}`;const body=type==='quote'?`Dear ${o.customer.name},\n\nQuotation ${o.id} for catering on ${fdl(o.eventDate)}.\nTime: ${t12(o.timeStart)||''} · Venue: ${o.venue}\nTotal: S$ ${(o.grandTotal||0).toFixed(2)} incl. 9% GST\n\nKindly reply to confirm.\n\nUrban Roti Catering\nwww.urbanroti.com.sg`:`Dear ${o.customer.name},\n\nInvoice ${o.id} for event on ${fdl(o.eventDate)}.\nTotal Due: S$ ${(o.grandTotal||0).toFixed(2)} incl. 9% GST. Ref: ${o.id}\n\nUrban Roti Catering`;window.location.href=`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`}
 
-function mkInv(qid){const qs=DB.quotes(),qi=qs.findIndex(x=>x.id===qid);if(qi<0)return;qs[qi].status='confirmed';DB.sq(qs);const q=qs[qi];const inv={id:DB.ni(),invoiceDate:new Date().toISOString().split('T')[0],quotationId:q.id,status:'issued',customer:{...q.customer},eventDate:q.eventDate,slot:q.slot,timeStart:q.timeStart,timeEnd:q.timeEnd,pax:{...q.pax},pricingItems:q.pricingItems,additionalCosts:q.additionalCosts||[],foodTotal:q.foodTotal,addTotal:q.addTotal,subtotal:q.subtotal,gst:q.gst,grandTotal:q.grandTotal,terms:q.terms,remarks:q.remarks||'',menuText:q.menuText||'',discount:q.discount||null,discountAmount:q.discountAmount||0,advancePayment:0,fromName:q.from?.name,fromContact:q.from?.contact};const is=DB.invs();is.unshift(inv);DB.si(is);toast(`Invoice ${inv.id} created!`,'ok');setTimeout(()=>oSheet(inv.id,'invoice'),400);dash();renderHome()}
+function mkInv(qid){const qs=DB.quotes(),qi=qs.findIndex(x=>x.id===qid);if(qi<0)return;qs[qi].status='confirmed';DB.sq(qs);const q=qs[qi];const inv={id:DB.ni(),invoiceDate:new Date().toISOString().split('T')[0],quotationId:q.id,status:'issued',customer:{...q.customer},eventDate:q.eventDate,eventDates:q.eventDates||[q.eventDate],slot:q.slot,timeStart:q.timeStart,timeEnd:q.timeEnd,pax:{...q.pax},pricingItems:q.pricingItems,additionalCosts:q.additionalCosts||[],foodTotal:q.foodTotal,addTotal:q.addTotal,subtotal:q.subtotal,gst:q.gst,grandTotal:q.grandTotal,terms:q.terms,remarks:q.remarks||'',menuText:q.menuText||'',discount:q.discount||null,discountAmount:q.discountAmount||0,advancePayment:0,fromName:q.from?.name,fromContact:q.from?.contact};const is=DB.invs();is.unshift(inv);DB.si(is);toast(`Invoice ${inv.id} created!`,'ok');setTimeout(()=>oSheet(inv.id,'invoice'),400);dash();renderHome()}
 function mkPaid(id){const is=DB.invs(),idx=is.findIndex(x=>x.id===id);if(idx>=0){is[idx].status='paid';DB.si(is);toast('Marked as PAID 🎉','ok');renderHist()}}
 
 // ── [FIX 4] DELETE FUNCTIONS ──
@@ -953,7 +1000,7 @@ function renderHist(){
     var qs=DB.quotes().filter(function(q){return !s||q.id.toLowerCase().includes(s)||(q.customer?.name||'').toLowerCase().includes(s)});
     if(!qs.length){c.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-tx">No quotations yet.<br>Tap ✦ to create your first quote.</div></div>';return}
     c.innerHTML=qs.map(function(q){
-      var sub='📅 '+fd(q.eventDate)+(q.timeStart?' · '+t12(q.timeStart):'')+(q.slot?' · '+q.slot:'');
+      var sub='📅 '+(q.eventDates&&q.eventDates.length>1?q.eventDates.map(fd).join(' & '):fd(q.eventDate))+(q.timeStart?' · '+t12(q.timeStart):'')+(q.slot?' · '+q.slot:'');
       var pax=(q.pax?.adults||0)+(q.pax?.kids||0);
       var invBtn=q.status!=='invoiced'
         ?'<button class="qb qb-i" onclick="mkInv(\''+q.id+'\')">🧾 Gen Invoice</button>'
@@ -977,7 +1024,7 @@ function renderHist(){
     var is=DB.invs().filter(function(i){return !s||i.id.toLowerCase().includes(s)||(i.customer?.name||'').toLowerCase().includes(s)});
     if(!is.length){c.innerHTML='<div class="empty"><div class="empty-ic">🧾</div><div class="empty-tx">No invoices yet.</div></div>';return}
     c.innerHTML=is.map(function(inv){
-      var sub='📅 '+fd(inv.eventDate)+(inv.timeStart?' · '+t12(inv.timeStart):'')+(inv.slot?' · '+inv.slot:'');
+      var sub='📅 '+(inv.eventDates&&inv.eventDates.length>1?inv.eventDates.map(fd).join(' & '):fd(inv.eventDate))+(inv.timeStart?' · '+t12(inv.timeStart):'')+(inv.slot?' · '+inv.slot:'');
       var paidBtn=inv.status!=='paid'?'<button class="qb qb-i" onclick="mkPaid(\''+inv.id+'\')">✅ Mark Paid</button>':'';
       return '<div class="qc">'
         +'<div class="qc-t" onclick="oSheet(\''+inv.id+'\',\'invoice\')">'
@@ -1009,7 +1056,7 @@ function shareQ(id,type){
     +'<div style="font-size:13px;color:var(--muted);margin-top:2px">'+(obj.customer?.contact||'')+'</div></div>'
     +'<div style="background:var(--cream2);border-radius:10px;padding:12px;font-size:12px;color:var(--ink);line-height:1.7">'
     +'<strong>'+obj.id+'</strong><br>'
-    +'📅 '+fdl(obj.eventDate)+(obj.slot?' · '+obj.slot:'')+'<br>'
+    +'📅 '+(obj.eventDates&&obj.eventDates.length>1?obj.eventDates.map(fdl).join(' & '):fdl(obj.eventDate))+(obj.slot?' · '+obj.slot:'')+'<br>'
     +'💰 S$ '+(obj.grandTotal||0).toFixed(2)+' (incl. 9% GST)</div>';
   document.getElementById('sh-foot').innerHTML=
     '<button class="sb sb-w" onclick="waWithPDF(\''+type+'\',\''+id+'\')">💬 WhatsApp — Send with PDF</button>'
