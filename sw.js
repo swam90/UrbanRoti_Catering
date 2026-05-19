@@ -2,7 +2,7 @@
 // Provides offline support and full PWA installability.
 // Bump CACHE_VERSION whenever you update index.html so installed clients refresh.
 
-const CACHE_VERSION = 'urban-roti-v1';
+const CACHE_VERSION = 'urban-roti-v3';
 
 const APP_SHELL = [
   './',
