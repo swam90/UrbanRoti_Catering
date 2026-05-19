@@ -575,7 +575,7 @@ function oSheet(id,type){
   document.getElementById('sh-body').innerHTML=bodyHtml;
   let a=`<button class="sb sb-w" onclick="waWithPDF('${type}','${id}')">💬 Share via WhatsApp (PDF)</button>`;
   a+=`<button class="sb sb-e" onclick="mail('${type}','${id}')">✉️ Share via Email</button>`;
-  if(type==='quote'&&obj.status!=='invoiced')a+=`<button class="sb sb-g" onclick="mkInv('${id}');cSheet()">✅ Confirm & Generate Invoice</button>`;
+  if(type==='quote'&&obj.status!=='invoiced')a+=`<button class="sb sb-g" onclick="promptMkInv('${id}')">✅ Confirm & Generate Invoice</button>`;
   if(type==='invoice'&&(obj.status!=='paid'&&(obj.advancePayment||0)<(obj.grandTotal||0)))a+=`<button class="sb sb-g" onclick="mkPaid('${id}');cSheet()">✅ Mark as Fully Paid</button>`;
   a+=`<button class="sb sb-o" onclick="xPDF('${id}','${type}')">📄 Export Full PDF</button>`;
   document.getElementById('sh-foot').innerHTML=a;
@@ -715,7 +715,8 @@ function genA4HTML(obj,type){
   var eventDatesArr=obj.eventDates&&obj.eventDates.length?obj.eventDates:[obj.eventDate];
   var eventDatesDisplay=eventDatesArr.filter(Boolean).map(function(d){return fdl(d)}).join(' &amp; ')||'--';
   return '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1A0C04;background:#fff}</style>'
-  +'<div style="padding:44px 52px;background:#fff;min-height:1123px">'
+  +'<div style="background:#fff">'
+  +'<div id="pdf-repeating-header" style="padding:38px 52px 14px;background:#fff">'
   // HEADER — Urban Roti name now uses serif font to match QUOTATION character
   +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;border-bottom:3px solid #C4552A;margin-bottom:20px">'
   +'<div style="display:flex;align-items:center;gap:14px">'
@@ -752,7 +753,9 @@ function genA4HTML(obj,type){
   +'<div><span style="color:#8A6540">Adults: </span><strong>'+(obj.pax?.adults||0)+'</strong></div>'
   +'<div><span style="color:#8A6540">Kids: </span><strong>'+(obj.pax?.kids||0)+'</strong></div>'
   +'<div><span style="color:#8A6540">Total Pax: </span><strong>'+paxTotal+'</strong></div></div>'
-  +(obj.remarks?'<div style="background:#FDF6EE;border-left:4px solid #8A6540;padding:11px 16px;border-radius:4px;margin-bottom:20px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8A6540;margin-bottom:4px">Remarks</div><div style="font-size:13px;line-height:1.6">'+obj.remarks+'</div></div>':'')
+  +(obj.remarks?'<div style="background:#FDF6EE;border-left:4px solid #8A6540;padding:11px 16px;border-radius:4px;margin-bottom:16px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8A6540;margin-bottom:4px">Remarks</div><div style="font-size:13px;line-height:1.6">'+obj.remarks+'</div></div>':'')
+  +'</div>'
+  +'<div id="pdf-body" style="padding:16px 52px 44px;background:#fff">'
   // FOOD PACKAGES header (orange) + table with orange sub-header
   +'<div style="display:flex;justify-content:space-between;background:#C4552A;color:#fff;padding:11px 14px;font-size:14px;font-weight:700;border-radius:4px 4px 0 0">'
   +'<span>FOOD PACKAGES</span><span>S$ '+foodTotal.toFixed(2)+'</span></div>'
@@ -828,6 +831,7 @@ function genA4HTML(obj,type){
   +'<div style="font-size:11px;color:#8A6540">101 Syed Alwi Road, Singapore 207677 | www.urbanroti.com.sg | +65 6209 5545</div></div>'
   +'<div style="text-align:right;font-size:11px;color:#8A6540"><div>'+obj.id+'</div><div>'+validityNote+'</div></div>'
   +'</div>'
+  +'</div>'
   +'</div>';
 }
 
@@ -902,25 +906,63 @@ async function xPDF(id,type){
   wrap.innerHTML=genA4HTML(obj,type);
   document.body.appendChild(wrap);
   await new Promise(r=>setTimeout(r,200));
-  fixPageBreaks(wrap);// push bank-details/sig off page breaks
+  fixPageBreaks(wrap);
   await new Promise(r=>setTimeout(r,50));
   try{
+    // Capture header element separately for repetition on pages 2+
+    const headerEl=wrap.querySelector('#pdf-repeating-header');
+    let headerCanvas=null;
+    if(headerEl)headerCanvas=await html2canvas(headerEl,{scale:2,useCORS:true,backgroundColor:'#fff',width:794,windowWidth:794});
+
     const canvas=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:'#fff',width:794,windowWidth:794});
     document.body.removeChild(wrap);
+
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
     const imgData=canvas.toDataURL('image/png');
+    const headerData=headerCanvas?headerCanvas.toDataURL('image/png'):null;
     const pdfW=210,pdfH=297;
-    const imgH=Math.round(canvas.height*pdfW/canvas.width*100)/100;// round to avoid float drift
-    let remaining=imgH,pageY=0;
-    while(remaining>1){
-      if(pageY>0)pdf.addPage();
-      pdf.addImage(imgData,'PNG',0,-(pageY),pdfW,imgH);
-      pageY+=pdfH;remaining-=pdfH;
+    const totalImgH=Math.round(canvas.height*pdfW/canvas.width*100)/100;
+    const hdrH=headerCanvas?Math.round(headerCanvas.height*pdfW/headerCanvas.width*100)/100:0;
+
+    // Usable content height on pages 2+ (header + margins eat into it)
+    const subPageContent=pdfH-hdrH-7;
+    const totalPages=totalImgH<=pdfH?1:1+Math.ceil((totalImgH-pdfH)/subPageContent);
+
+    // ── PAGE 1: full content from top ──
+    pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgH);
+    pdf.setFontSize(8.5);pdf.setTextColor(140,101,64);
+    pdf.text('Page 1'+(totalPages>1?' of '+totalPages:''),pdfW-10,pdfH-3,{align:'right'});
+    if(totalPages>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2 \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+
+    // ── PAGES 2+ : repeating header + content slice ──
+    var contentStart=pdfH;
+    for(var pg=2;pg<=totalPages;pg++){
+      pdf.addPage();
+      // Place content image so that contentStart aligns to just below header
+      var imgY=hdrH+4-contentStart;
+      pdf.addImage(imgData,'PNG',0,imgY,pdfW,totalImgH);
+      // White out the header zone (content image bleeds there)
+      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrH+4,'F');
+      // Repeating header
+      if(headerData)pdf.addImage(headerData,'PNG',0,0,pdfW,hdrH);
+      // "Continued from page X"
+      pdf.setFontSize(7.5);pdf.setTextColor(140,101,64);
+      pdf.setFont(undefined,'italic');
+      pdf.text('\u2190 Continued from Page '+(pg-1),10,hdrH+3.5);
+      pdf.setFont(undefined,'normal');
+      // Page number
+      pdf.setFontSize(8.5);
+      pdf.text('Page '+pg+' of '+totalPages,pdfW-10,pdfH-3,{align:'right'});
+      // "Continued on next page" if not last
+      if(pg<totalPages){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pg+1)+' \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+      contentStart+=subPageContent;
     }
+
     await addMenuToPDF(pdf,obj);
     pdf.save(`${id}.pdf`);toast('PDF downloaded!','ok');
   }catch(e){
+    if(document.body.contains(wrap))document.body.removeChild(wrap);
     toast('PDF failed','err');
   }
 }
@@ -938,18 +980,44 @@ async function waWithPDF(type,id){
   await new Promise(r=>setTimeout(r,50));
   let pdfBlob=null;
   try{
+    // Capture header separately for repetition on pages 2+
+    const headerElW=wrap.querySelector('#pdf-repeating-header');
+    let headerCanvasW=null;
+    if(headerElW)headerCanvasW=await html2canvas(headerElW,{scale:1.5,useCORS:true,backgroundColor:'#fff',width:794,windowWidth:794});
+
     const canvas=await html2canvas(wrap,{scale:1.5,useCORS:true,backgroundColor:'#fff',width:794,windowWidth:794});
     document.body.removeChild(wrap);
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
     const imgData=canvas.toDataURL('image/png');
+    const headerDataW=headerCanvasW?headerCanvasW.toDataURL('image/png'):null;
     const pdfW=210,pdfH=297;
-    const imgH=Math.round(canvas.height*pdfW/canvas.width*100)/100;
-    let remaining=imgH,pageY=0;
-    while(remaining>1){
-      if(pageY>0)pdf.addPage();
-      pdf.addImage(imgData,'PNG',0,-pageY,pdfW,imgH);
-      pageY+=pdfH;remaining-=pdfH;
+    const totalImgHW=Math.round(canvas.height*pdfW/canvas.width*100)/100;
+    const hdrHW=headerCanvasW?Math.round(headerCanvasW.height*pdfW/headerCanvasW.width*100)/100:0;
+    const subPageContentW=pdfH-hdrHW-7;
+    const totalPagesW=totalImgHW<=pdfH?1:1+Math.ceil((totalImgHW-pdfH)/subPageContentW);
+
+    // Page 1
+    pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgHW);
+    pdf.setFontSize(8.5);pdf.setTextColor(140,101,64);
+    pdf.text('Page 1'+(totalPagesW>1?' of '+totalPagesW:''),pdfW-10,pdfH-3,{align:'right'});
+    if(totalPagesW>1){pdf.setFont(undefined,'italic');pdf.text('Continued on Page 2 \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+
+    var contentStartW=pdfH;
+    for(var pgW=2;pgW<=totalPagesW;pgW++){
+      pdf.addPage();
+      var imgYW=hdrHW+4-contentStartW;
+      pdf.addImage(imgData,'PNG',0,imgYW,pdfW,totalImgHW);
+      pdf.setFillColor(255,255,255);pdf.rect(0,0,pdfW,hdrHW+4,'F');
+      if(headerDataW)pdf.addImage(headerDataW,'PNG',0,0,pdfW,hdrHW);
+      pdf.setFontSize(7.5);pdf.setTextColor(140,101,64);
+      pdf.setFont(undefined,'italic');
+      pdf.text('\u2190 Continued from Page '+(pgW-1),10,hdrHW+3.5);
+      pdf.setFont(undefined,'normal');
+      pdf.setFontSize(8.5);
+      pdf.text('Page '+pgW+' of '+totalPagesW,pdfW-10,pdfH-3,{align:'right'});
+      if(pgW<totalPagesW){pdf.setFont(undefined,'italic');pdf.text('Continued on Page '+(pgW+1)+' \u2192',10,pdfH-3);pdf.setFont(undefined,'normal');}
+      contentStartW+=subPageContentW;
     }
     await addMenuToPDF(pdf,obj);
     pdfBlob=pdf.output('blob');
@@ -981,7 +1049,34 @@ async function waWithPDF(type,id){
 
 function mail(type,id){const o=type==='quote'?DB.quotes().find(x=>x.id===id):DB.invs().find(x=>x.id===id);if(!o)return;const sub=type==='quote'?`Urban Roti Quotation ${o.id}`:`Urban Roti Invoice ${o.id}`;const body=type==='quote'?`Dear ${o.customer.name},\n\nQuotation ${o.id} for catering on ${fdl(o.eventDate)}.\nTime: ${t12(o.timeStart)||''} · Venue: ${o.venue}\nTotal: S$ ${(o.grandTotal||0).toFixed(2)} incl. 9% GST\n\nKindly reply to confirm.\n\nUrban Roti Catering\nwww.urbanroti.com.sg`:`Dear ${o.customer.name},\n\nInvoice ${o.id} for event on ${fdl(o.eventDate)}.\nTotal Due: S$ ${(o.grandTotal||0).toFixed(2)} incl. 9% GST. Ref: ${o.id}\n\nUrban Roti Catering`;window.location.href=`mailto:?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`}
 
-function mkInv(qid){const qs=DB.quotes(),qi=qs.findIndex(x=>x.id===qid);if(qi<0)return;qs[qi].status='confirmed';DB.sq(qs);const q=qs[qi];const inv={id:DB.ni(),invoiceDate:new Date().toISOString().split('T')[0],quotationId:q.id,status:'issued',customer:{...q.customer},eventDate:q.eventDate,eventDates:q.eventDates||[q.eventDate],slot:q.slot,timeStart:q.timeStart,timeEnd:q.timeEnd,pax:{...q.pax},pricingItems:q.pricingItems,additionalCosts:q.additionalCosts||[],foodTotal:q.foodTotal,addTotal:q.addTotal,subtotal:q.subtotal,gst:q.gst,grandTotal:q.grandTotal,terms:q.terms,remarks:q.remarks||'',menuText:q.menuText||'',discount:q.discount||null,discountAmount:q.discountAmount||0,advancePayment:0,fromName:q.from?.name,fromContact:q.from?.contact};const is=DB.invs();is.unshift(inv);DB.si(is);toast(`Invoice ${inv.id} created!`,'ok');setTimeout(()=>oSheet(inv.id,'invoice'),400);dash();renderHome()}
+// ── MANUAL INVOICE NUMBER ──
+function promptMkInv(qid){
+  var autoId=DB.ni();
+  var modal=document.createElement('div');
+  modal.id='inv-num-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML='<div style="background:#fff;border-radius:16px;padding:24px 20px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.3)">'
+    +'<div style="font-size:17px;font-weight:900;color:#1A0C04;margin-bottom:4px">Create Invoice</div>'
+    +'<div style="font-size:13px;color:#8A6540;margin-bottom:18px">Enter a custom invoice number or use the suggested one.</div>'
+    +'<div style="margin-bottom:18px"><label style="font-size:11px;font-weight:900;color:#8A6540;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Invoice Number</label>'
+    +'<input id="inv-num-input" type="text" value="'+autoId+'" style="width:100%;padding:12px 14px;border:2px solid #E2D0B8;border-radius:12px;font-family:Nunito,sans-serif;font-size:16px;font-weight:700;color:#1A0C04;box-sizing:border-box"></div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<button onclick="document.getElementById(\'inv-num-modal\').remove()" style="flex:1;padding:12px;border-radius:30px;border:2px solid #E2D0B8;background:#fff;font-family:Nunito,sans-serif;font-size:14px;font-weight:800;color:#8A6540;cursor:pointer">Cancel</button>'
+    +'<button onclick="confirmMkInv(\''+qid+'\')" style="flex:2;padding:12px;border-radius:30px;border:none;background:#C4552A;color:#fff;font-family:Nunito,sans-serif;font-size:14px;font-weight:800;cursor:pointer">✅ Create Invoice</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+  setTimeout(function(){var inp=document.getElementById('inv-num-input');if(inp){inp.focus();inp.select();}},120);
+}
+function confirmMkInv(qid){
+  var inp=document.getElementById('inv-num-input');
+  var customId=inp?inp.value.trim():'';
+  var modal=document.getElementById('inv-num-modal');
+  if(modal)modal.remove();
+  if(!customId){toast('Please enter an invoice number','err');return;}
+  mkInv(qid,customId);
+}
+
+function mkInv(qid,customId){const qs=DB.quotes(),qi=qs.findIndex(x=>x.id===qid);if(qi<0)return;qs[qi].status='confirmed';DB.sq(qs);const q=qs[qi];const invId=customId||DB.ni();const inv={id:invId,invoiceDate:new Date().toISOString().split('T')[0],quotationId:q.id,status:'issued',customer:{...q.customer},eventDate:q.eventDate,eventDates:q.eventDates||[q.eventDate],slot:q.slot,timeStart:q.timeStart,timeEnd:q.timeEnd,pax:{...q.pax},pricingItems:q.pricingItems,additionalCosts:q.additionalCosts||[],foodTotal:q.foodTotal,addTotal:q.addTotal,subtotal:q.subtotal,gst:q.gst,grandTotal:q.grandTotal,terms:q.terms,remarks:q.remarks||'',menuText:q.menuText||'',discount:q.discount||null,discountAmount:q.discountAmount||0,advancePayment:0,fromName:q.from?.name,fromContact:q.from?.contact};const is=DB.invs();is.unshift(inv);DB.si(is);toast(`Invoice ${invId} created!`,'ok');setTimeout(()=>oSheet(invId,'invoice'),400);dash();renderHome()}
 function mkPaid(id){const is=DB.invs(),idx=is.findIndex(x=>x.id===id);if(idx>=0){is[idx].status='paid';DB.si(is);toast('Marked as PAID 🎉','ok');renderHist()}}
 
 // ── [FIX 4] DELETE FUNCTIONS ──
@@ -1003,7 +1098,7 @@ function renderHist(){
       var sub='📅 '+(q.eventDates&&q.eventDates.length>1?q.eventDates.map(fd).join(' & '):fd(q.eventDate))+(q.timeStart?' · '+t12(q.timeStart):'')+(q.slot?' · '+q.slot:'');
       var pax=(q.pax?.adults||0)+(q.pax?.kids||0);
       var invBtn=q.status!=='invoiced'
-        ?'<button class="qb qb-i" onclick="mkInv(\''+q.id+'\')">🧾 Gen Invoice</button>'
+        ?'<button class="qb qb-i" onclick="promptMkInv(\''+q.id+'\')">🧾 Gen Invoice</button>'
         :'<button class="qb" style="background:var(--cream2);color:var(--muted);cursor:default;flex:1.5">✅ Invoiced</button>';
       return '<div class="qc">'
         +'<div class="qc-t" onclick="oSheet(\''+q.id+'\',\'quote\')">'
@@ -1083,9 +1178,11 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 // PWA: register service worker for offline + installability
-if('serviceWorker' in navigator){
+// Only works on https:// or localhost — not on file:// protocol
+if('serviceWorker' in navigator && location.protocol !== 'file:'){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('./sw.js').catch(function(err){console.warn('SW registration failed:',err);});
+  });
   });
 }
 // Capture Android install prompt (available if you want an in-app Install button later)
