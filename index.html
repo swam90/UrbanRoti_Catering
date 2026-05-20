@@ -1012,6 +1012,16 @@ async function xPDF(id,type){
   await new Promise(r=>setTimeout(r,200));
   fixPageBreaks(wrap);
   await new Promise(r=>setTimeout(r,50));
+
+  // Measure ACTUAL bottom of last content (footer) before canvas capture.
+  // Canvas height includes trailing padding + whitespace; we need where the real content ends.
+  var _footerEl=wrap.querySelector('.pdf-footer');
+  var _contentEndMM=null;
+  if(_footerEl){
+    var _bottomPx=_footerEl.offsetTop+_footerEl.offsetHeight;
+    _contentEndMM=_bottomPx*210/794; // 794px wrap width → 210mm
+  }
+
   try{
     // Capture header element separately for repetition on pages 2+
     const headerEl=wrap.querySelector('#pdf-repeating-header');
@@ -1033,7 +1043,10 @@ async function xPDF(id,type){
     const footerStripH=22; // 3 lines breathing room at bottom
     const gapH=13;          // gap below repeated header (for "Continued from" + 1 blank line)
     const subPageContent=pdfH-hdrH-footerStripH-gapH;
-    const totalPages=totalImgH<=pdfH?1:1+Math.ceil((totalImgH-pdfH)/subPageContent);
+    // Use ACTUAL content end (footer bottom) for pagination, not totalImgH
+    // (totalImgH includes trailing padding/whitespace that creates blank pages)
+    const _paginateAt=(_contentEndMM!=null && _contentEndMM<totalImgH) ? _contentEndMM+3 : totalImgH;
+    const totalPages=_paginateAt<=pdfH?1:1+Math.ceil((_paginateAt-pdfH)/subPageContent);
 
     // ── PAGE 1: full content from top ──
     pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgH);
@@ -1095,6 +1108,13 @@ async function waWithPDF(type,id){
   await new Promise(r=>setTimeout(r,200));
   fixPageBreaks(wrap);// push bank-details/sig off page breaks
   await new Promise(r=>setTimeout(r,50));
+  // Measure actual footer bottom before canvas capture
+  var _footerElW=wrap.querySelector('.pdf-footer');
+  var _contentEndMMW=null;
+  if(_footerElW){
+    var _bottomPxW=_footerElW.offsetTop+_footerElW.offsetHeight;
+    _contentEndMMW=_bottomPxW*210/794;
+  }
   let pdfBlob=null;
   try{
     // Capture header separately for repetition on pages 2+
@@ -1112,7 +1132,8 @@ async function waWithPDF(type,id){
     const totalImgHW=Math.round(canvas.height*pdfW/canvas.width*100)/100;
     const hdrHW=headerCanvasW?Math.round(headerCanvasW.height*pdfW/headerCanvasW.width*100)/100:0;
     const subPageContentW=pdfH-hdrHW-22-13;
-    const totalPagesW=totalImgHW<=pdfH?1:1+Math.ceil((totalImgHW-pdfH)/subPageContentW);
+    const _paginateAtW=(_contentEndMMW!=null && _contentEndMMW<totalImgHW) ? _contentEndMMW+3 : totalImgHW;
+    const totalPagesW=_paginateAtW<=pdfH?1:1+Math.ceil((_paginateAtW-pdfH)/subPageContentW);
 
     // Page 1
     pdf.addImage(imgData,'PNG',0,0,pdfW,totalImgHW);
