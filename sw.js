@@ -1,7 +1,7 @@
 // Urban Roti — Service Worker
 // Bump CACHE_VERSION on every deploy so installed clients get fresh files.
 
-const CACHE_VERSION = 'urban-roti-v8';
+const CACHE_VERSION = 'urban-roti-v9';
 
 const APP_SHELL = [
   './',

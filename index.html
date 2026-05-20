@@ -197,16 +197,137 @@ body{font-family:'Nunito',sans-serif;color:var(--ink);font-size:15px;line-height
 .ed-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .ed-row input[type="date"]{flex:1;padding:11px 12px;border:2px solid var(--border);border-radius:var(--r3);font-family:'Nunito',sans-serif;font-size:14px;font-weight:600;color:var(--ink);background:#fff;transition:.2s}
 .ed-row input[type="date"]:focus{outline:none;border-color:var(--clay)}
+
+/* ── LOGIN OVERLAY ── */
+#login-overlay{position:fixed;inset:0;background:linear-gradient(180deg,#FFFBF4 0%,#FDF6EE 100%);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow-y:auto}
+#login-overlay.hidden{display:none}
+.login-card{background:#fff;border-radius:20px;padding:28px 22px;width:100%;max-width:380px;box-shadow:0 10px 30px rgba(196,85,42,.15)}
+.login-brand{text-align:center;margin-bottom:22px}
+.login-brand img{width:64px;height:64px;border-radius:14px;border:1.5px solid #E2D0B8;object-fit:contain;margin-bottom:10px}
+.login-brand h1{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:700;color:#1A0C04;letter-spacing:-.5px}
+.login-brand .sub{font-size:11px;color:#C4552A;font-weight:800;letter-spacing:1.5px;margin-top:3px}
+.login-tabs{display:flex;gap:8px;background:#FDF6EE;border-radius:30px;padding:4px;margin-bottom:18px}
+.login-tab{flex:1;padding:10px;border:none;background:transparent;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#8A6540;cursor:pointer;border-radius:24px;transition:.2s}
+.login-tab.active{background:#C4552A;color:#fff;box-shadow:0 2px 8px rgba(196,85,42,.3)}
+.login-field{margin-bottom:12px}
+.login-field label{display:block;font-size:10px;font-weight:900;color:#8A6540;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.login-field input{width:100%;padding:13px 14px;border:2px solid #E2D0B8;border-radius:12px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:600;color:#1A0C04;box-sizing:border-box;transition:.2s}
+.login-field input:focus{outline:none;border-color:#C4552A}
+.login-btn{width:100%;padding:14px;border-radius:30px;border:none;background:#C4552A;color:#fff;font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;margin-top:8px;box-shadow:0 4px 14px rgba(196,85,42,.3);transition:.2s}
+.login-btn:disabled{opacity:.5;cursor:not-allowed}
+.login-btn:hover:not(:disabled){background:#A8451F}
+.login-err{background:#FFE4DC;color:#A8451F;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:700;margin-top:10px;display:none;border-left:3px solid #C0392B}
+.login-err.show{display:block}
+.login-info{font-size:11px;color:#8A6540;text-align:center;margin-top:12px;line-height:1.5}
+.login-footer{text-align:center;margin-top:14px;font-size:11px;color:#8A6540;font-weight:700}
+.logout-btn{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:6px 8px;margin-left:6px}
+.user-chip{background:rgba(255,255,255,.18);color:#fff;font-size:10px;font-weight:800;padding:4px 9px;border-radius:20px;letter-spacing:.3px}
 </style>
 </head>
 <body>
+
+<!-- ── FIREBASE SDK (modular, exposed on window.urFB) ── -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDfZDbsmvisd60A4dzu3nh4azpshN6DVWc",
+  authDomain: "urban-roti-catering.firebaseapp.com",
+  projectId: "urban-roti-catering",
+  storageBucket: "urban-roti-catering.firebasestorage.app",
+  messagingSenderId: "24497950399",
+  appId: "1:24497950399:web:d0248afe9fbca10c12800a",
+  measurementId: "G-TLWVVNE8DR"
+};
+const app = initializeApp(firebaseConfig);
+const fbAuth = getAuth(app);
+const fbDB = getFirestore(app);
+
+window.urFB = {
+  ready: true,
+  currentUser: null,
+  onAuthStateChanged: (cb) => onAuthStateChanged(fbAuth, cb),
+  signIn: (email, pw) => signInWithEmailAndPassword(fbAuth, email, pw),
+  signUp: (email, pw) => createUserWithEmailAndPassword(fbAuth, email, pw),
+  signOut: () => signOut(fbAuth),
+  resetPassword: (email) => sendPasswordResetEmail(fbAuth, email),
+  // Save a single doc
+  saveDoc: async (uid, col, item) => {
+    if (!uid || !item || !item.id) return;
+    try { await setDoc(doc(fbDB, 'users', uid, col, item.id), item); }
+    catch(e) { console.warn('Cloud save failed:', e.message); }
+  },
+  // Save many docs at once (used during initial sync upload)
+  saveMany: async (uid, col, items) => {
+    if (!uid || !items?.length) return;
+    try {
+      const batch = writeBatch(fbDB);
+      for (const item of items) {
+        if (item && item.id) batch.set(doc(fbDB, 'users', uid, col, item.id), item);
+      }
+      await batch.commit();
+    } catch(e) { console.warn('Cloud batch failed:', e.message); }
+  },
+  // Load all docs from a user collection
+  loadAll: async (uid, col) => {
+    if (!uid) return [];
+    try {
+      const snap = await getDocs(collection(fbDB, 'users', uid, col));
+      const items = [];
+      snap.forEach(d => items.push(d.data()));
+      return items;
+    } catch(e) { console.warn('Cloud load failed:', e.message); return []; }
+  },
+  // Delete a doc
+  deleteOne: async (uid, col, id) => {
+    if (!uid || !id) return;
+    try { await deleteDoc(doc(fbDB, 'users', uid, col, id)); }
+    catch(e) { console.warn('Cloud delete failed:', e.message); }
+  }
+};
+window.dispatchEvent(new Event('urFBReady'));
+</script>
+
+<!-- ── LOGIN OVERLAY (shown until user authenticates) ── -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-brand">
+      <img id="login-logo" src="" alt="UR" onerror="this.style.display='none'">
+      <h1>Urban Roti</h1>
+      <div class="sub">CATERING &amp; EVENTS</div>
+    </div>
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-signin" onclick="urSetTab('signin')">Sign In</button>
+      <button class="login-tab" id="tab-signup" onclick="urSetTab('signup')">Sign Up</button>
+    </div>
+    <div class="login-field">
+      <label>Email</label>
+      <input id="ur-email" type="email" autocomplete="email" placeholder="you@example.com">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input id="ur-pw" type="password" autocomplete="current-password" placeholder="Minimum 6 characters">
+    </div>
+    <button class="login-btn" id="ur-submit" onclick="urDoAuth()">Sign In</button>
+    <div class="login-err" id="ur-err"></div>
+    <div class="login-info" id="ur-info"><a href="#" onclick="urForgotPw();return false" style="color:#C4552A;font-weight:700;text-decoration:none">Forgot password?</a></div>
+    <div class="login-footer">Your data is securely stored in your account</div>
+  </div>
+</div>
+
 <div id="app">
   <div id="hdr">
     <div class="hdr-logo">
       <div class="hdr-ring"><img id="app-logo-img" src="https://www.urbanroti.com.sg/assets/images/logo/logo.png" alt="UR" onerror="this.src=LOGO_B64"></div>
       <div class="hdr-name">Urban <em>Roti</em></div>
     </div>
-    <button class="hdr-ic" onclick="go('history')">📋</button>
+    <div style="display:flex;align-items:center">
+      <span class="user-chip" id="user-chip" style="display:none"></span>
+      <button class="hdr-ic" onclick="go('history')">📋</button>
+      <button class="logout-btn" id="logout-btn" onclick="urLogout()" title="Sign out" style="display:none">⏻</button>
+    </div>
   </div>
   <div id="screens">
     <div class="screen active" id="s-home">
@@ -280,7 +401,21 @@ const DB={
   _l:k=>{try{const d=localStorage.getItem('ur_'+k);return d?JSON.parse(d):null}catch{return null}},
   _s:(k,v)=>{try{localStorage.setItem('ur_'+k,JSON.stringify(v))}catch{}},
   quotes:()=>DB._l('quotes')||[],invs:()=>DB._l('invoices')||[],
-  sq:q=>DB._s('quotes',q),si:i=>DB._s('invoices',i),
+  // Save locally first (sync, fast), then push to cloud in background (fire-and-forget).
+  // _cloudPush diffs against the previous state to know what to save/delete.
+  sq:q=>{const prev=DB.quotes();DB._s('quotes',q);DB._cloudPush('quotes',prev,q);},
+  si:i=>{const prev=DB.invs();DB._s('invoices',i);DB._cloudPush('invoices',prev,i);},
+  _cloudPush:(col,prev,cur)=>{
+    var uid=window.urFB&&window.urFB.currentUser&&window.urFB.currentUser.uid;
+    if(!uid||!window.urFB)return;
+    var prevIds=new Set((prev||[]).map(x=>x.id));
+    var curIds=new Set((cur||[]).map(x=>x.id));
+    // Save items that are new or modified (simple: just save all current)
+    var toSave=(cur||[]).filter(x=>x&&x.id);
+    if(toSave.length)window.urFB.saveMany(uid,col,toSave);
+    // Delete items removed from cur
+    prevIds.forEach(id=>{if(!curIds.has(id))window.urFB.deleteOne(uid,col,id);});
+  },
   nq(){const q=DB.quotes(),y=new Date().getFullYear();return`Q-${y}-${String(q.filter(x=>x.id.includes(y)).length+1).padStart(4,'0')}`},
   ni(){const i=DB.invs(),y=new Date().getFullYear();return`INV-${y}-${String(i.filter(x=>x.id.includes(y)).length+1).padStart(4,'0')}`}
 };
@@ -1312,14 +1447,181 @@ function dash(){const qs=DB.quotes(),is=DB.invs();document.getElementById('st-q'
 function renderHome(){const recent=DB.quotes().slice(0,5);const el=document.getElementById('home-list');if(!recent.length){el.innerHTML=`<div class="empty"><div class="empty-ic">✦</div><div class="empty-tx">No quotations yet.<br>Tap the ✦ button to create your first catering quote!</div><button class="btn-pill" onclick="newQ()">✦ Create First Quote</button></div>`;return}el.innerHTML=recent.map(q=>`<div class="qc" onclick="oSheet('${q.id}','quote')"><div class="qc-t"><div><div class="qc-id">${q.id}</div><div class="qc-name">${q.customer?.name}</div><div class="qc-sub">📅 ${fd(q.eventDate)}${q.timeStart?' · '+t12(q.timeStart):''} · ${q.slot||''} · 📍 ${(q.venue||'').substring(0,22)}</div></div><span class="badge b${q.status?.[0]||'d'}">${q.status||'draft'}</span></div><div class="qc-b"><div class="qc-amt">S$ ${(q.grandTotal||0).toFixed(2)} <span>incl. GST</span></div><div class="qc-pax">👥 ${(q.pax?.adults||0)+(q.pax?.kids||0)} pax</div></div></div>`).join('')}
 
 function toast(msg,type=''){const c=document.getElementById('toasts'),t=document.createElement('div');t.className=`toast ${type==='ok'?'ok':type==='err'?'err':''}`;t.innerHTML=(type==='ok'?'✓ ':type==='err'?'✕ ':'ℹ ')+msg;c.appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300)},2800)}
+// ═══════════════════════════════════════════════════════
+// AUTHENTICATION & CLOUD SYNC
+// ═══════════════════════════════════════════════════════
+
+var urAuthMode = 'signin'; // 'signin' or 'signup'
+
+function urSetTab(mode){
+  urAuthMode = mode;
+  document.getElementById('tab-signin').classList.toggle('active', mode==='signin');
+  document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
+  document.getElementById('ur-submit').textContent = mode==='signin' ? 'Sign In' : 'Create Account';
+  var pwInput = document.getElementById('ur-pw');
+  pwInput.setAttribute('autocomplete', mode==='signin' ? 'current-password' : 'new-password');
+  urClearErr();
+}
+
+function urShowErr(msg){
+  var el = document.getElementById('ur-err');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function urClearErr(){
+  var el = document.getElementById('ur-err');
+  el.textContent = '';
+  el.classList.remove('show');
+}
+
+async function urDoAuth(){
+  urClearErr();
+  var email = document.getElementById('ur-email').value.trim();
+  var pw = document.getElementById('ur-pw').value;
+  if(!email || !pw){ urShowErr('Please enter email and password'); return; }
+  if(pw.length < 6){ urShowErr('Password must be at least 6 characters'); return; }
+  if(!window.urFB || !window.urFB.ready){ urShowErr('Cloud not ready — please refresh'); return; }
+
+  var btn = document.getElementById('ur-submit');
+  btn.disabled = true;
+  btn.textContent = urAuthMode==='signin' ? 'Signing in…' : 'Creating account…';
+
+  try {
+    if(urAuthMode === 'signin'){
+      await window.urFB.signIn(email, pw);
+    } else {
+      await window.urFB.signUp(email, pw);
+    }
+    // Success — onAuthStateChanged handler will hide overlay and load data
+  } catch(e) {
+    var msg = e.message || 'Authentication failed';
+    if(msg.includes('user-not-found')) msg = 'No account found with that email';
+    else if(msg.includes('wrong-password') || msg.includes('invalid-credential')) msg = 'Incorrect email or password';
+    else if(msg.includes('email-already-in-use')) msg = 'This email is already registered — try signing in';
+    else if(msg.includes('invalid-email')) msg = 'Invalid email address';
+    else if(msg.includes('weak-password')) msg = 'Password is too weak (min 6 characters)';
+    else if(msg.includes('network')) msg = 'Network error — check your connection';
+    else msg = msg.replace(/Firebase: ?/,'').replace(/\(auth\/[^)]+\)/,'').trim();
+    urShowErr(msg);
+    btn.disabled = false;
+    btn.textContent = urAuthMode==='signin' ? 'Sign In' : 'Create Account';
+  }
+}
+
+async function urForgotPw(){
+  var email = document.getElementById('ur-email').value.trim();
+  if(!email){ urShowErr('Enter your email above first, then tap Forgot password'); return; }
+  try {
+    await window.urFB.resetPassword(email);
+    urClearErr();
+    var info = document.getElementById('ur-info');
+    info.innerHTML = '<span style="color:#2A7A50;font-weight:700">✓ Password reset email sent — check your inbox</span>';
+  } catch(e){
+    urShowErr('Could not send reset email: ' + (e.message||'').replace(/Firebase: ?/,''));
+  }
+}
+
+async function urLogout(){
+  if(!confirm('Sign out? Your data is safely stored in your account and will load on next sign-in.')) return;
+  try { await window.urFB.signOut(); } catch{}
+  // Clear local data so next user starts fresh
+  try {
+    localStorage.removeItem('ur_quotes');
+    localStorage.removeItem('ur_invoices');
+  } catch{}
+  // Reload to reset all in-memory state
+  location.reload();
+}
+
+// Load all user data from cloud into localStorage, then refresh UI
+async function urLoadFromCloud(uid){
+  if(!uid || !window.urFB) return;
+  try {
+    var [quotes, invoices] = await Promise.all([
+      window.urFB.loadAll(uid, 'quotes'),
+      window.urFB.loadAll(uid, 'invoices')
+    ]);
+    // Sort newest first by createdAt or invoiceDate
+    quotes.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    invoices.sort((a,b)=>(b.invoiceDate||'').localeCompare(a.invoiceDate||''));
+    // Get existing local data
+    var localQuotes = DB._l('quotes') || [];
+    var localInvs = DB._l('invoices') || [];
+    // Merge: cloud data wins for matching IDs, but keep any local items not in cloud (will get uploaded)
+    var cloudIds = new Set(quotes.map(x=>x.id));
+    var localOnlyQ = localQuotes.filter(x=>!cloudIds.has(x.id));
+    var cloudIdsI = new Set(invoices.map(x=>x.id));
+    var localOnlyI = localInvs.filter(x=>!cloudIdsI.has(x.id));
+    var mergedQ = [...localOnlyQ, ...quotes];
+    var mergedI = [...localOnlyI, ...invoices];
+    DB._s('quotes', mergedQ);
+    DB._s('invoices', mergedI);
+    // If local-only items exist, push them to cloud
+    if(localOnlyQ.length) window.urFB.saveMany(uid, 'quotes', localOnlyQ);
+    if(localOnlyI.length) window.urFB.saveMany(uid, 'invoices', localOnlyI);
+  } catch(e){ console.warn('Cloud load failed:', e); }
+}
+
+function urShowApp(user){
+  document.getElementById('login-overlay').classList.add('hidden');
+  var chip = document.getElementById('user-chip');
+  chip.textContent = (user.email||'').split('@')[0];
+  chip.style.display = 'inline-block';
+  document.getElementById('logout-btn').style.display = 'inline-block';
+}
+
+function urShowLogin(){
+  document.getElementById('login-overlay').classList.remove('hidden');
+  document.getElementById('user-chip').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
+  // Reset form
+  document.getElementById('ur-pw').value = '';
+  urClearErr();
+  var info = document.getElementById('ur-info');
+  info.innerHTML = '<a href="#" onclick="urForgotPw();return false" style="color:#C4552A;font-weight:700;text-decoration:none">Forgot password?</a>';
+  // Reset submit button
+  var btn = document.getElementById('ur-submit');
+  btn.disabled = false;
+  btn.textContent = urAuthMode==='signin' ? 'Sign In' : 'Create Account';
+}
+
+// Wire up auth listener once Firebase SDK is ready
+function urInitAuth(){
+  if(!window.urFB){ setTimeout(urInitAuth, 100); return; }
+  // Use embedded logo on login screen
+  var loginLogo = document.getElementById('login-logo');
+  if(loginLogo && typeof LOGO_B64 !== 'undefined') loginLogo.src = LOGO_B64;
+
+  window.urFB.onAuthStateChanged(async function(user){
+    if(user){
+      window.urFB.currentUser = user;
+      // Load cloud data on initial sign-in
+      await urLoadFromCloud(user.uid);
+      urShowApp(user);
+      dash(); renderHome();
+    } else {
+      window.urFB.currentUser = null;
+      urShowLogin();
+    }
+  });
+}
+
+// ── DOM ready: initialise UI bits then start auth flow ──
 document.addEventListener('DOMContentLoaded',function(){
-  // Use embedded logo
   var li=document.getElementById('app-logo-img');
   if(li)li.src=LOGO_B64;
-  // Show version
   var vt=document.getElementById('app-ver-tag');
   if(vt)vt.textContent=APP_FULL_NAME;
-  dash();renderHome()
+  var loginLogo=document.getElementById('login-logo');
+  if(loginLogo)loginLogo.src=LOGO_B64;
+  // Enter key submits the login form
+  ['ur-email','ur-pw'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter')urDoAuth();});
+  });
+  // Start Firebase auth listener (waits for SDK if not yet loaded)
+  if(window.urFB){ urInitAuth(); }
+  else { window.addEventListener('urFBReady', urInitAuth, {once:true}); }
 });
 
 // PWA: register service worker — only when sw.js is actually available at this origin
