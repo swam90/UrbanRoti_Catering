@@ -655,7 +655,7 @@ function genA4HTML(obj,type){
   var fromExtra=isQ?'Urban Roti Catering & Events':'admin@urbanroti.com.sg';
   var toLabel=isQ?'Quotation For':'Billed To';
   var validityNote=isQ?'':'Payment due within 3 working days';
-  var paySection=isQ?'':('<div style="margin-bottom:18px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Payment Instructions</div><div style="background:#FDF6EE;padding:14px;border-radius:6px;font-size:13px;line-height:1.7"><div><strong>Bank Transfer:</strong> DBS Bank Singapore</div><div><strong>Account Name:</strong> Urban Roti-Syed Alwi</div><div><strong>Account No:</strong> 100-904248-6</div><div><strong>Payment Reference:</strong> '+obj.id+'</div><div style="margin-top:6px;color:#C4552A">Please email proof of payment to admin@urbanroti.com.sg</div></div></div>');
+  var paySection=isQ?'':('<div class="pdf-payment-section" style="margin-bottom:18px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Payment Instructions</div><div style="background:#FDF6EE;padding:14px;border-radius:6px;font-size:13px;line-height:1.7"><div><strong>Bank Transfer:</strong> DBS Bank Singapore</div><div><strong>Account Name:</strong> Urban Roti-Syed Alwi</div><div><strong>Account No:</strong> 100-904248-6</div><div><strong>Payment Reference:</strong> '+obj.id+'</div><div style="margin-top:6px;color:#C4552A">Please email proof of payment to admin@urbanroti.com.sg</div></div></div>');
   // Pre-computed discount section
   var discObj=obj.discount||{type:'amt',value:0};
   var discountAmtPDF=discObj.type==='pct'?Math.round(((obj.foodTotal||0)+(obj.addTotal||0))*discObj.value/100*100)/100:(Math.min(discObj.value||0,(obj.foodTotal||0)+(obj.addTotal||0)));
@@ -791,16 +791,16 @@ function genA4HTML(obj,type){
   // ADDITIONAL CHARGES (orange) if any
   +addSection
   // MANUAL MENU TEXT moved to last page — see below near signatures
-  // TOTALS — right-aligned box
-  +'<div style="display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:16px"><div style="width:270px">'
+  // TOTALS — right-aligned box (protected from page splits)
+  +'<div class="pdf-totals" style="display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:16px"><div style="width:270px">'
   +discRowPDF
   +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#8A6540;font-weight:700">Subtotal</span><span>S$ '+subAmt.toFixed(2)+'</span></div>'
   +'<div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:13px;border-bottom:1px solid #F5EBD6"><span style="color:#D4922A;font-weight:700">GST (9%)</span><span>S$ '+gstAmt.toFixed(2)+'</span></div>'
   +'<div style="display:flex;justify-content:space-between;padding:11px 12px;font-size:16px;font-weight:700;background:#C4552A;color:#fff;border-radius:4px;margin-top:3px"><span>GRAND TOTAL</span><span>S$ '+grand.toFixed(2)+'</span></div>'
   +advSection
   +'</div></div>'
-  // Amount in words
-  +'<div style="background:#FDF6EE;border:1px dashed #D4922A;border-radius:6px;padding:13px 16px;font-size:12px;font-style:italic;color:#3C1A08;margin-bottom:20px;line-height:1.6">'
+  // Amount in words (protected — never split)
+  +'<div class="pdf-amount-words" style="background:#FDF6EE;border:1px dashed #D4922A;border-radius:6px;padding:13px 16px;font-size:12px;font-style:italic;color:#3C1A08;margin-bottom:20px;line-height:1.6">'
   +'<strong>Amount in Words:</strong> '+words(grand)+'</div>'
   +paySection
   // Bank Details — above Terms
@@ -820,10 +820,11 @@ function genA4HTML(obj,type){
   +'<div style="font-size:10px;color:#8A6540;margin-top:5px;font-weight:700">UEN: 201510984RPN2</div>'
   +'</div>'
   +'</div></div>'
-  // Terms & Conditions
-  +'<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Terms &amp; Conditions</div>'
+  // Terms & Conditions (protected)
+  +'<div class="pdf-terms" style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#C4552A;margin-bottom:8px">Terms &amp; Conditions</div>'
   +'<ol style="padding-left:18px">'+termsHtml+'</ol></div>'
   // Signatures (menu details added as a separate last page via xPDF/waWithPDF)
+  +'<div id="sig-section">'
   +(isQ
     ?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:72px">'
      +'<div style="border-top:2px solid #1A0C04;padding-top:10px;text-align:center">'
@@ -842,8 +843,9 @@ function genA4HTML(obj,type){
      +'</div>'
      +'</div>'
   )
+  +'</div>'
   // Footer
-  +'<div style="margin-top:28px;padding-top:13px;border-top:2px solid #1A0C04;display:flex;justify-content:space-between;align-items:center">'
+  +'<div class="pdf-footer" style="margin-top:28px;padding-top:13px;border-top:2px solid #1A0C04;display:flex;justify-content:space-between;align-items:center">'
   +'<div><div style="font-size:13px;font-weight:700">Urban Roti Catering &amp; Events</div>'
   +'<div style="font-size:11px;color:#8A6540;font-weight:700">101 Syed Alwi Road, Singapore 207677 | www.urbanroti.com.sg | +65 6209 5545</div></div>'
   +'<div style="text-align:right;font-size:11px;color:#8A6540;font-weight:700"><div>'+obj.id+'</div><div>'+validityNote+'</div></div>'
@@ -896,22 +898,64 @@ async function addMenuToPDF(pdf, obj){
   }
 }
 
-// ── PAGE BREAK FIXER — pushes sections that straddle A4 boundaries to next page ──
+// ── PAGE BREAK FIXER — pushes sections that straddle page boundaries to next page ──
 function fixPageBreaks(wrap){
-  // A4 at 794px wide: height = 794 × (297/210) ≈ 1123px
-  var pageH=Math.round(794*297/210);
-  var targets=wrap.querySelectorAll('#bank-details-section, #sig-section');
-  targets.forEach(function(el){
-    var top=el.offsetTop;
-    var h=el.offsetHeight;
-    var pageNum=Math.floor(top/pageH);
-    var pageBreakAt=(pageNum+1)*pageH;
-    // If element straddles the next page break, push it down
-    if(top<pageBreakAt&&(top+h)>pageBreakAt){
-      var pushBy=pageBreakAt-top+16;
-      el.style.marginTop=(parseInt(el.style.marginTop||0)+pushBy)+'px';
-    }
-  });
+  // A4 in pixels at 794px-wide capture: 1px = 210/794 mm
+  var pxPerMM = 794/210;
+  var pageHPx = Math.round(297 * pxPerMM);          // ~1123px — full A4 page
+  var footerPx = Math.round(22 * pxPerMM);          // ~83px — footer-strip whiteout
+  var gapPx   = Math.round(13 * pxPerMM);           // ~49px — gap below repeated header on p2+
+
+  // Measure actual repeating-header height (only present on pages 2+)
+  var hdrEl = wrap.querySelector('#pdf-repeating-header');
+  var hdrPx = hdrEl ? hdrEl.offsetHeight : Math.round(60 * pxPerMM);
+
+  // CRITICAL: page-1's footer strip creates a 22mm DEAD ZONE — content there is
+  // hidden on page 1 (covered by white footer) AND not shown on page 2
+  // (page 2's image starts at canvas y = pageHPx, not at the visible-end of page 1).
+  // Pages 2+ DON'T have a dead zone because page N+1's image starts where
+  // page N's footer-hidden zone begins (they overlap, so content is preserved).
+
+  var subPageVisible = pageHPx - hdrPx - gapPx - footerPx; // visible content height pages 2+
+
+  // breaks[i] = { end: visible-end of this page, next: visible-start of next page }
+  var breaks = [];
+  // Page 1
+  var visEnd = pageHPx - footerPx;     // page-1 visible content ends here
+  var nextStart = pageHPx;              // page-2 content starts here (22mm dead zone in between!)
+  breaks.push({ end: visEnd, next: nextStart });
+  // Pages 2+ (no dead zone — next page's visible start equals this page's visible end)
+  for(var i=0; i<20; i++){
+    visEnd = nextStart + subPageVisible;
+    nextStart = visEnd; // overlap — no dead zone
+    breaks.push({ end: visEnd, next: nextStart });
+  }
+
+  // All sections that MUST stay on a single page (never split, never in dead zone)
+  var selectors = '.pdf-totals,.pdf-amount-words,.pdf-payment-section,#bank-details-section,.pdf-terms,#sig-section';
+  var targets = wrap.querySelectorAll(selectors);
+
+  // Multiple passes — pushing one section can shift later ones
+  for(var pass=0; pass<8; pass++){
+    var pushed = false;
+    Array.prototype.forEach.call(targets, function(el){
+      var top = el.offsetTop;
+      var bottom = top + el.offsetHeight;
+      for(var b=0; b<breaks.length; b++){
+        var brk = breaks[b];
+        // Element is problematic if it crosses the visible-end OR sits entirely in the dead zone
+        if(top < brk.next && bottom > brk.end){
+          // Push down so element STARTS at next page's visible content area, with 4mm breathing room
+          var pushBy = (brk.next - top) + Math.round(4 * pxPerMM);
+          var curMT = parseInt(el.style.marginTop || 0);
+          el.style.marginTop = (curMT + pushBy) + 'px';
+          pushed = true;
+          break;
+        }
+      }
+    });
+    if(!pushed) break;
+  }
 }
 
 // ── MENU TEXT — dedicated last page(s) after signature ──
