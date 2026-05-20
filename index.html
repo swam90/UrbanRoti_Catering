@@ -826,15 +826,8 @@ function genA4HTML(obj,type){
   // Signatures (menu details added as a separate last page via xPDF/waWithPDF)
   +'<div id="sig-section">'
   +(isQ
-    ?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:72px">'
-     +'<div style="border-top:2px solid #1A0C04;padding-top:10px;text-align:center">'
-     +'<div style="font-size:13px;font-weight:700;color:#1A0C04">Customer Acknowledgement</div>'
-     +'<div style="font-size:11px;color:#8A6540;font-weight:700;margin-top:2px">Customer Signature &amp; Date</div>'
-     +'</div>'
-     +'<div style="border-top:2px solid #1A0C04;padding-top:10px;text-align:center">'
-     +'<div style="font-size:13px;font-weight:700;color:#1A0C04">Authorised Signature</div>'
-     +'<div style="font-size:11px;color:#8A6540;font-weight:700;margin-top:2px">Urban Roti Catering &amp; Events</div>'
-     +'</div>'
+    ?'<div style="margin-top:60px;padding:18px;text-align:center;background:#FDF6EE;border:1.5px dashed #C4552A;border-radius:8px">'
+     +'<div style="font-size:13px;font-style:italic;color:#8A6540;font-weight:700;letter-spacing:.3px">This is a system-generated quotation and no signature is required.</div>'
      +'</div>'
     :'<div style="display:flex;justify-content:flex-end;margin-top:72px">'
      +'<div style="border-top:2px solid #1A0C04;padding-top:10px;width:260px;text-align:center">'
