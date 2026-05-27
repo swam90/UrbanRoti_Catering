@@ -255,20 +255,32 @@ window.urFB = {
   resetPassword: (email) => sendPasswordResetEmail(fbAuth, email),
   // Save a single doc
   saveDoc: async (uid, col, item) => {
-    if (!uid || !item || !item.id) return;
-    try { await setDoc(doc(fbDB, 'users', uid, col, item.id), item); }
-    catch(e) { console.warn('Cloud save failed:', e.message); }
+    if (!uid || !item || !item.id) return { ok: false, err: 'missing-args' };
+    try { 
+      await setDoc(doc(fbDB, 'users', uid, col, item.id), item); 
+      return { ok: true };
+    }
+    catch(e) { 
+      console.warn('Cloud save failed:', e.message); 
+      return { ok: false, err: e.message };
+    }
   },
-  // Save many docs at once (used during initial sync upload)
+  // Save many docs — INDIVIDUALLY (not batch) so one bad doc doesn't kill the whole sync
   saveMany: async (uid, col, items) => {
-    if (!uid || !items?.length) return;
-    try {
-      const batch = writeBatch(fbDB);
-      for (const item of items) {
-        if (item && item.id) batch.set(doc(fbDB, 'users', uid, col, item.id), item);
+    if (!uid || !items?.length) return { ok: 0, fail: 0, errors: [] };
+    var ok = 0, fail = 0, errors = [];
+    for (const item of items) {
+      if (!item || !item.id) continue;
+      try {
+        await setDoc(doc(fbDB, 'users', uid, col, item.id), item);
+        ok++;
+      } catch(e) {
+        fail++;
+        errors.push({ id: item.id, msg: e.message });
+        console.warn('Cloud save failed for', item.id, ':', e.message);
       }
-      await batch.commit();
-    } catch(e) { console.warn('Cloud batch failed:', e.message); }
+    }
+    return { ok, fail, errors };
   },
   // Load all docs from a user collection
   loadAll: async (uid, col) => {
@@ -326,6 +338,7 @@ window.dispatchEvent(new Event('urFBReady'));
     <div style="display:flex;align-items:center">
       <span class="user-chip" id="user-chip" style="display:none"></span>
       <button class="hdr-ic" onclick="go('history')">📋</button>
+      <button class="logout-btn" id="sync-btn" onclick="urSyncNow()" title="Force sync to cloud" style="display:none">☁</button>
       <button class="logout-btn" id="logout-btn" onclick="urLogout()" title="Sign out" style="display:none">⏻</button>
     </div>
   </div>
@@ -405,14 +418,33 @@ const DB={
   // _cloudPush diffs against the previous state to know what to save/delete.
   sq:q=>{const prev=DB.quotes();DB._s('quotes',q);DB._cloudPush('quotes',prev,q);},
   si:i=>{const prev=DB.invs();DB._s('invoices',i);DB._cloudPush('invoices',prev,i);},
-  _cloudPush:(col,prev,cur)=>{
+  // Strip fields that Firestore can't accept (binary attachments exceed 1MB doc limit,
+  // functions/undefined aren't valid Firestore types). Keep menuFile in localStorage only.
+  _clean:(o)=>{
+    if(!o||typeof o!=='object')return o;
+    var c={};
+    for(var k in o){
+      if(k==='menuFile')continue; // skip — too large for Firestore (1MB doc limit)
+      var v=o[k];
+      if(v===undefined||typeof v==='function')continue;
+      c[k]=v;
+    }
+    return c;
+  },
+  _cloudPush:async(col,prev,cur)=>{
     var uid=window.urFB&&window.urFB.currentUser&&window.urFB.currentUser.uid;
     if(!uid||!window.urFB)return;
     var prevIds=new Set((prev||[]).map(x=>x.id));
     var curIds=new Set((cur||[]).map(x=>x.id));
-    // Save items that are new or modified (simple: just save all current)
-    var toSave=(cur||[]).filter(x=>x&&x.id);
-    if(toSave.length)window.urFB.saveMany(uid,col,toSave);
+    // Save items that are new or modified (clean each one)
+    var toSave=(cur||[]).filter(x=>x&&x.id).map(DB._clean);
+    if(toSave.length){
+      var r=await window.urFB.saveMany(uid,col,toSave);
+      if(r&&r.fail>0){
+        // Surface failure to user so they know sync isn't working
+        if(typeof toast==='function')toast('⚠ Cloud sync failed for '+r.fail+' '+col+'. '+(r.errors[0]?.msg||''),'err');
+      }
+    }
     // Delete items removed from cur
     prevIds.forEach(id=>{if(!curIds.has(id))window.urFB.deleteOne(uid,col,id);});
   },
@@ -1568,12 +1600,16 @@ function urShowApp(user){
   chip.textContent = (user.email||'').split('@')[0];
   chip.style.display = 'inline-block';
   document.getElementById('logout-btn').style.display = 'inline-block';
+  var sb = document.getElementById('sync-btn');
+  if(sb) sb.style.display = 'inline-block';
 }
 
 function urShowLogin(){
   document.getElementById('login-overlay').classList.remove('hidden');
   document.getElementById('user-chip').style.display = 'none';
   document.getElementById('logout-btn').style.display = 'none';
+  var sb = document.getElementById('sync-btn');
+  if(sb) sb.style.display = 'none';
   // Reset form
   document.getElementById('ur-pw').value = '';
   urClearErr();
@@ -1583,6 +1619,27 @@ function urShowLogin(){
   var btn = document.getElementById('ur-submit');
   btn.disabled = false;
   btn.textContent = urAuthMode==='signin' ? 'Sign In' : 'Create Account';
+}
+
+// Manual cloud sync — uploads everything currently in localStorage. Shows result.
+async function urSyncNow(){
+  if(!window.urFB || !window.urFB.currentUser){ toast('Not signed in','err'); return; }
+  var uid = window.urFB.currentUser.uid;
+  var qs = (DB.quotes()||[]).map(DB._clean);
+  var is = (DB.invs()||[]).map(DB._clean);
+  toast('Syncing '+qs.length+' quotes + '+is.length+' invoices…','ok');
+  var r1 = await window.urFB.saveMany(uid, 'quotes', qs);
+  var r2 = await window.urFB.saveMany(uid, 'invoices', is);
+  var msg = '✓ '+ (r1.ok+r2.ok) +' saved';
+  if(r1.fail+r2.fail > 0){
+    msg += ' • ✗ '+(r1.fail+r2.fail)+' failed';
+    var firstErr = (r1.errors[0]||r2.errors[0]||{}).msg || '';
+    if(firstErr) msg += ' ('+firstErr.substring(0,60)+')';
+    toast(msg, 'err');
+    console.error('Sync errors:', r1.errors, r2.errors);
+  } else {
+    toast(msg, 'ok');
+  }
 }
 
 // Wire up auth listener once Firebase SDK is ready
