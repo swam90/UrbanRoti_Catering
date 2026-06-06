@@ -1,7 +1,7 @@
 // Urban Roti — Service Worker
 // Bump CACHE_VERSION on every deploy so installed clients get fresh files.
 
-const CACHE_VERSION = 'urban-roti-v13';
+const CACHE_VERSION = 'urban-roti-v14';
 
 const APP_SHELL = [
   './',
@@ -14,51 +14,50 @@ const APP_SHELL = [
   './favicon.png'
 ];
 
-// Install: cache app shell and immediately take over (skipWaiting)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())   // <-- activate immediately, no waiting
+      .then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activate: delete ALL old caches, then claim all open tabs
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
         keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))
       ))
-      .then(() => self.clients.claim())   // <-- take over open tabs immediately
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch: network-first for HTML so updates always reach the client
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
-
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
   const isHTML = req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
 
-  // HTML — always try network first, fall back to cache offline
+  if (!sameOrigin && (url.host.includes('firebaseio.com') ||
+      url.host.includes('googleapis.com') ||
+      url.host.includes('firestore.googleapis.com') ||
+      url.host.includes('identitytoolkit.googleapis.com'))) {
+    return;
+  }
+
   if (isHTML) {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match('./index.html'))
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_VERSION).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match('./index.html'))
     );
     return;
   }
 
-  // Cross-origin (CDN/fonts) — stale-while-revalidate
   if (!sameOrigin) {
     event.respondWith(
       caches.match(req).then((cached) => {
@@ -75,7 +74,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin assets — cache first, then network
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
