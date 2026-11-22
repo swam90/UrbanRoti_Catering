@@ -488,7 +488,7 @@ function editQ(id){
 function editInv(id){
   const inv=DB.invs().find(x=>x.id===id);if(!inv)return;
   editingId=null;editingInvId=id;step=0;
-  wd={fn:inv.fromName||'Urban Roti',fc:inv.fromContact||'+65 6209 5545',cn:inv.customer?.name||'',cc:inv.customer?.contact||'',ve:inv.venue||'',ed:inv.eventDate||'',sl:inv.slot||'',ts:inv.timeStart||'',te:inv.timeEnd||'',pa:inv.pax?.adults||0,pk:inv.pax?.kids||0,wt:inv.terms||TERMS,rm:inv.remarks||'',menuText:inv.menuText||'',discType:inv.discount?.type||'amt',discVal:inv.discount?.value||0};
+  wd={fn:inv.fromName||'Urban Roti',fc:inv.fromContact||'+65 6209 5545',cn:inv.customer?.name||'',cc:inv.customer?.contact||'',ve:inv.venue||'',ed:inv.eventDate||'',sl:inv.slot||'',ts:inv.timeStart||'',te:inv.timeEnd||'',pa:inv.pax?.adults||0,pk:inv.pax?.kids||0,wt:inv.terms||TERMS,rm:inv.remarks||'',menuText:inv.menuText||'',discType:inv.discount?.type||'amt',discVal:inv.discount?.value||0,invDate:inv.invoiceDate||new Date().toISOString().split('T')[0]};
   eds=(inv.eventDates&&inv.eventDates.length)?[...inv.eventDates]:[inv.eventDate||''];
   pis=(inv.pricingItems||[]).map(p=>({n:p.packageName,p:p.unitPrice,t:p.paxType||'adults',q:p.customQty||0}));
   acs=(inv.additionalCosts||[]).map(c=>({d:c.description||c.d||'',a:c.amount||c.a||0}));
@@ -563,8 +563,10 @@ function s0(){
   var mins=['00','05','10','15','20','25','30','35','40','45','50','55'];
   var hOpts=hrs.map(function(h){return '<option value="'+h+'" '+(parseInt(ts12.h)===h?'selected':'')+'>'+h+'</option>';}).join('');
   var mOpts=mins.map(function(m){return '<option value="'+m+'" '+(ts12.m===m?'selected':'')+'>'+m+'</option>';}).join('');
+  var invDateBlock=editingInvId?('<div class="fld" style="background:#FDF6EE;border:1.5px solid #E2D0B8;border-radius:12px;padding:12px 14px;margin-bottom:14px"><label>Invoice Date *</label><input id="inv-date" type="date" value="'+(wd.invDate||'')+'"></div>'):'';
   return (
-    '<div class="r2">'
+    invDateBlock
+    +'<div class="r2">'
     +'<div class="fld"><label>Your Name *</label><input id="fn" value="'+(wd.fn||'')+'" placeholder="Sales Rep"></div>'
     +'<div class="fld"><label>Your Contact * <span style="font-weight:600;text-transform:none;font-size:10px">(8 digits)</span></label>'
     +'<input id="fc" type="tel" inputmode="numeric" maxlength="8" value="'+(wd.fc||'')+'" placeholder="91234567" '
@@ -668,6 +670,7 @@ function saveWD(){
   if(step===0){
     ['fn','fc','cn','cc','ve'].forEach(function(id){var e=document.getElementById(id);if(e)wd[id]=e.value});
     wd.ed=eds[0]||''; // primary date (first in array)
+    var idEl=document.getElementById('inv-date');if(idEl)wd.invDate=idEl.value;
     var rmEl0=document.getElementById('rm');if(rmEl0)wd.rm=rmEl0.value;
     // 12hr time selects → save as HH:MM 24hr
     var tsH=document.getElementById('ts-h')?.value,tsM=document.getElementById('ts-m')?.value,tsAP=document.getElementById('ts-ap')?.value;
@@ -678,6 +681,7 @@ function saveWD(){
 }
 function validate(){
   if(step===0){
+    if(editingInvId){var idv=document.getElementById('inv-date');if(!idv||!idv.value){toast('Please enter the invoice date','err');idv&&idv.focus();return false}}
     var req=[['fn','Your name'],['cn','Customer name'],['ve','Venue']];
     for(var k=0;k<req.length;k++){var e=document.getElementById(req[k][0]);if(!e?.value.trim()){toast('Please fill: '+req[k][1],'err');e?.focus();return false}}
     if(!eds[0]){toast('Please fill: Event date','err');return false}
@@ -719,11 +723,11 @@ function generate(){
     const idx=qs.findIndex(x=>x.id===editingId);
     if(idx>=0){qs[idx]={...qs[idx],from:{name:wd.fn,contact:wd.fc},customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt};DB.sq(qs);toast(`${editingId} updated!`,'ok');const id=editingId;editingId=null;oSheet(id,'quote');go('history');}
   } else if(editingInvId){
-    // Update existing invoice (keeps advancePayment, status, invoiceDate, id)
+    // Update existing invoice (keeps advancePayment, status, id; invoice date is editable)
     const invs=DB.invs(),invIdx=invs.findIndex(x=>x.id===editingInvId);
     if(invIdx>=0){
       const orig=invs[invIdx];
-      invs[invIdx]={...orig,customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt,fromName:wd.fn,fromContact:wd.fc};
+      invs[invIdx]={...orig,invoiceDate:wd.invDate||orig.invoiceDate,customer:{name:wd.cn,contact:wd.cc},venue:wd.ve,slot:wd.sl,eventDate:wd.ed,eventDates:eds.filter(Boolean),timeStart:wd.ts,timeEnd:wd.te,pax:{adults:pa,kids:pk},pricingItems:items,menuFile:mf,additionalCosts:acs.map(c=>({description:c.d,amount:c.a})),foodTotal:food,addTotal:add,subtotal:sub,gst,grandTotal:grand,terms:wd.wt||TERMS,remarks:wd.rm||'',menuText:wd.menuText||'',discount:{type:discType,value:discVal},discountAmount:discountAmt,fromName:wd.fn,fromContact:wd.fc};
       DB.si(invs);toast(`Invoice ${editingInvId} updated! ✅`,'ok');
       const invId=editingInvId;editingInvId=null;oSheet(invId,'invoice');go('history');
     }
