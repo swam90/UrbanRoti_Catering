@@ -340,6 +340,7 @@ window.dispatchEvent(new Event('urFBReady'));
     <div style="display:flex;align-items:center">
       <span class="user-chip" id="user-chip" style="display:none"></span>
       <button class="hdr-ic" onclick="go('history')">📋</button>
+      <button class="logout-btn" id="bk-btn" onclick="urBackupMenu()" title="Backup: Export / Import" style="display:none;font-size:17px">💾</button>
       <button class="logout-btn" id="sync-btn" onclick="urSyncNow()" title="Sync to cloud" style="display:none"><img src="data:image/png;base64,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" alt="Sync" style="width:21px;height:21px;vertical-align:middle;display:block"></button>
       <button class="logout-btn" id="logout-btn" onclick="urLogout()" title="Sign out" style="display:none"><img src="data:image/png;base64,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" alt="Sign out" style="width:22px;height:22px;vertical-align:middle;display:block"></button>
     </div>
@@ -1657,6 +1658,8 @@ function urShowApp(user){
   document.getElementById('logout-btn').style.display = 'inline-block';
   var sb = document.getElementById('sync-btn');
   if(sb) sb.style.display = 'inline-block';
+  var bk = document.getElementById('bk-btn');
+  if(bk) bk.style.display = 'inline-block';
 }
 
 function urShowLogin(){
@@ -1665,6 +1668,8 @@ function urShowLogin(){
   document.getElementById('logout-btn').style.display = 'none';
   var sb = document.getElementById('sync-btn');
   if(sb) sb.style.display = 'none';
+  var bk = document.getElementById('bk-btn');
+  if(bk) bk.style.display = 'none';
   // Reset form
   document.getElementById('ur-pw').value = '';
   urClearErr();
@@ -1695,6 +1700,82 @@ async function urSyncNow(){
   } else {
     toast(msg, 'ok');
   }
+}
+
+
+// ═══════════════════════════════════════════════════════
+// BACKUP: EXPORT / IMPORT (move data between accounts)
+// ═══════════════════════════════════════════════════════
+function urBackupMenu(){
+  var old=document.getElementById('bk-sheet'); if(old) old.remove();
+  var d=document.createElement('div');
+  d.id='bk-sheet';
+  d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-end;justify-content:center';
+  d.onclick=function(e){if(e.target===d)d.remove();};
+  var email=(window.urFB&&window.urFB.currentUser&&window.urFB.currentUser.email)||'';
+  d.innerHTML='<div style="background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));font-family:Nunito,sans-serif">'
+   +'<div style="font-weight:800;font-size:17px;color:#1A0C04">Backup &amp; Transfer</div>'
+   +'<div style="font-size:12px;color:#777;margin:4px 0 14px">Signed in as '+(email||'—')+'</div>'
+   +'<button onclick="urExportData()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#C4552A;color:#fff;font-weight:800;font-size:15px;margin-bottom:10px">⬇ Export data (download file)</button>'
+   +'<button onclick="document.getElementById(\'bk-file\').click()" style="width:100%;padding:14px;border:2px solid #C4552A;border-radius:12px;background:#fff;color:#C4552A;font-weight:800;font-size:15px;margin-bottom:10px">⬆ Import data (from file)</button>'
+   +'<div style="font-size:12px;color:#777;line-height:1.5">To move data to another account: Export here → Sign out → Sign in with the other email → Import. Imported items are added to the account you are signed in to; existing items with the same ID are overwritten.</div>'
+   +'<input type="file" id="bk-file" accept=".json,application/json" style="display:none" onchange="urImportData(this)">'
+   +'</div>';
+  document.body.appendChild(d);
+}
+
+function urExportData(){
+  try{
+    var user=(window.urFB&&window.urFB.currentUser)||{};
+    var payload={
+      app:'UrbanRoti', version:1,
+      exportedAt:new Date().toISOString(),
+      fromEmail:user.email||'',
+      quotes:DB.quotes()||[],
+      invoices:DB.invs()||[]
+    };
+    var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    var a=document.createElement('a');
+    var ymd=new Date().toISOString().slice(0,10);
+    a.href=URL.createObjectURL(blob);
+    a.download='UrbanRoti_backup_'+ymd+'.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+    toast('Exported '+payload.quotes.length+' quotes + '+payload.invoices.length+' invoices','ok');
+    var s=document.getElementById('bk-sheet'); if(s) s.remove();
+  }catch(e){ toast('Export failed: '+e.message,'err'); }
+}
+
+function urImportData(input){
+  var f=input.files&&input.files[0];
+  if(!f) return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var data=JSON.parse(r.result);
+      if(!data||data.app!=='UrbanRoti'||!Array.isArray(data.quotes)||!Array.isArray(data.invoices)){
+        toast('Not a valid Urban Roti backup file','err'); input.value=''; return;
+      }
+      var user=(window.urFB&&window.urFB.currentUser)||{};
+      var msg='Import '+data.quotes.length+' quotes + '+data.invoices.length+' invoices'
+        +(data.fromEmail?' (exported from '+data.fromEmail+')':'')
+        +' into '+(user.email||'this account')+'?';
+      if(!confirm(msg)){ input.value=''; return; }
+      function merge(cur,inc){
+        var map={}; (cur||[]).forEach(function(x){if(x&&x.id)map[x.id]=x;});
+        (inc||[]).forEach(function(x){if(x&&x.id)map[x.id]=x;});
+        return Object.keys(map).map(function(k){return map[k];});
+      }
+      var mq=merge(DB.quotes(),data.quotes);
+      var mi=merge(DB.invs(),data.invoices);
+      DB.sq(mq); DB.si(mi);   // saves locally and pushes to the signed-in account's cloud
+      toast('Imported — syncing to cloud…','ok');
+      var s=document.getElementById('bk-sheet'); if(s) s.remove();
+      setTimeout(function(){ try{dash();renderHome();}catch(e){} },300);
+    }catch(e){ toast('Import failed: '+e.message,'err'); }
+    input.value='';
+  };
+  r.readAsText(f);
 }
 
 // Wire up auth listener once Firebase SDK is ready
